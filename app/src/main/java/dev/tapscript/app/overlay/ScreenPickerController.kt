@@ -36,7 +36,12 @@ class ScreenPickerController(context: Context) {
         }
         cancel(returnToTapScript = false)
 
-        val view = PickerView(applicationContext, mode, ::complete, ::cancel)
+        val view = PickerView(
+            context = applicationContext,
+            mode = mode,
+            onComplete = ::complete,
+            onCancel = { cancel() },
+        )
         val layout = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,

@@ -1,12 +1,10 @@
 # Scripting API
 
-TapScript embeds Rhino JavaScript behind a small command API.
+TapScript embeds Rhino JavaScript behind a small command API. Scripts receive recognized variables and emit commands; Android objects are not exposed to JavaScript.
 
 ## Variables
 
 Recognition variables are exposed as the global `vars` object. Dot-separated extractor names are expanded into nested objects.
-
-If extractors write:
 
 ```text
 candidate.attackSpeed = 18.32
@@ -14,7 +12,7 @@ candidate.doubleHit   = 31.68
 equipped.attackSpeed  = 24.10
 ```
 
-JavaScript sees:
+becomes:
 
 ```javascript
 vars.candidate.attackSpeed
@@ -22,75 +20,69 @@ vars.candidate.doubleHit
 vars.equipped.attackSpeed
 ```
 
-Every text region also exposes raw OCR text under:
-
-```javascript
-vars.<regionId>.text
-```
+Every text region also exposes raw OCR text as `vars.<regionId>.text`.
 
 ## Commands
 
-### `tap(actionId)`
-
-Queues a tap on a named action target.
+Deterministic commands remain the default:
 
 ```javascript
 tap("equip");
+swipe("scroll");
+waitMs(150);
+log("candidate accepted");
 ```
 
-### `swipe(actionId)`
+For workflows that intentionally need timing or coordinate variability, use the explicit randomized variants:
 
-Queues a swipe using a named swipe target.
+```javascript
+tapRandom("equip", 12);          // point sampled inside a 12 px radius
+swipeRandom("scroll", 8, 40);    // start/end ±8 px, duration ±40 ms
+waitRandom(120, 180);             // inclusive random duration in milliseconds
+```
 
-### `waitMs(milliseconds)`
+Randomized coordinates are sampled at execution time, clamped to the physical screen, and never change the stored action target. `tapRandom` and `swipeRandom` accept up to 1000 px of position jitter. Waits and swipe-duration jitter are bounded to 60 seconds.
 
-Queues a bounded delay. This is not a busy wait and does not block the UI thread.
-
-### `log(message)`
-
-Writes a line through TapScript’s application logger (Logcat in the current MVP).
+`log(message)` writes through the same application logger used by the runtime, so script messages are visible in live logs and persistent run history.
 
 ## Sandbox philosophy
 
 The script is not given a `Context`, filesystem, network client, AccessibilityService, reflection bridge, or MediaProjection object. It only receives plain serialized data and command functions.
 
-This is not a hardened hostile-code sandbox. Profiles are assumed to be authored by the device owner. The boundary exists to keep game-specific scripts decoupled from Android implementation details and to make behavior testable.
+This is not a hardened hostile-code sandbox. Profiles are assumed to be authored by the device owner. The boundary keeps profile logic decoupled from Android implementation details and makes behavior testable.
 
-## Example: weighted item score
+## Example
 
 ```javascript
 const weights = {
   attackSpeed: 100,
   doubleHit: 100,
-  critDamage: 70,
-  lifesteal: 15
+  critDamage: 70
 };
 
 const caps = {
   attackSpeed: 40,
   doubleHit: 40,
-  critDamage: 100,
-  lifesteal: 20
+  critDamage: 100
 };
 
 function score(item) {
   if (!item) return 0;
   let total = 0;
   Object.keys(weights).forEach(function (key) {
-    const value = Number(item[key] || 0);
-    total += (value / caps[key]) * weights[key];
+    total += (Number(item[key] || 0) / caps[key]) * weights[key];
   });
   return total;
 }
 
 if (score(vars.candidate) > score(vars.equipped)) {
-  tap("equip");
+  tapRandom("equip", 10);
 } else {
   tap("sell");
 }
-waitMs(120);
+waitRandom(100, 160);
 ```
 
 ## Recommended script style
 
-Keep scripts pure where possible: compute from `vars`, then emit commands. Put game mechanics into small functions. Avoid loops whose termination depends on wall-clock time.
+Keep scripts pure where possible: compute from `vars`, then emit commands. Put domain mechanics into small functions. Prefer deterministic commands unless variability is part of the workflow. Avoid loops whose termination depends on wall-clock time.

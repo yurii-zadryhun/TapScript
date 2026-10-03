@@ -1,60 +1,37 @@
 # Runtime experience
 
-This document describes the `v0.2.0-alpha1` real-device UX pass.
+TapScript's runtime UX is built around staying over the target app instead of repeatedly switching back to the main Activity.
 
 ## Floating controls
 
-TapScript can show a draggable bubble above other apps after the user grants Android's **Display over other apps** permission.
+After `Display over other apps` permission is granted, TapScript shows a compact draggable rail with a status indicator. Tapping it opens quick controls for Workspace, Pause/Resume, Stop, and `× Close TapScript`. There is no separate Hide Bubble mode: closing TapScript is the operation that removes its runtime UI and services.
 
-The bubble is deliberately compact. Its status dot reflects the current automation state and its position is persisted. Tapping it opens quick controls for opening TapScript, pausing/resuming the active profile, stopping the profile, or hiding the bubble.
+## Overlay workspace
 
-The bubble is not meant to become a second full application UI. The next iteration will use a dedicated overlay workspace for editing and inspection while keeping the target app visible underneath.
+The on-top workspace provides Live, Profile, and Logs areas while the target app remains visible underneath. It can inspect runtime metrics, variables, OCR observations, freeze a capture frame, edit profile settings, and launch visual pickers.
+
+Overlay-hostile child windows should be avoided; new editing UI should prefer inline overlay-safe surfaces.
 
 ## Profile scope
 
-A profile can run against either:
+A profile can target either the whole screen or a specific package. App-scoped profiles use Accessibility foreground-package events. When the selected app is not active, recognition/actions pause; returning to it resumes processing. Manual and system/UI pause reasons are independent tokens.
 
-- **Whole screen** — TapScript does not restrict automation based on the foreground package.
-- **Specific app** — the user selects a launchable app by name. TapScript observes foreground-package changes from its accessibility service. When another app becomes active, the profile is paused and a log entry is written. Returning to the selected app automatically resumes the profile.
+## Capture lifecycle
 
-This gate is intentionally evaluated before OCR and decision execution so no tap/swipe command is emitted while the wrong app is active.
+Capture is requested as part of Start Profile. Stopping the profile stops capture. The MediaProjection consent UI is Android-owned and remains mandatory.
 
-## Live visual authoring
+Android 14+ currently requests default-display capture explicitly, so the system's single-app sharing choice is disabled. Optional single-app projection is planned and must preserve correct capture/interaction coordinate mapping.
 
-For app-scoped profiles, the editor can open the target app and temporarily place a transparent authoring overlay above it.
+## Visual authoring
 
-Supported pick modes:
+OCR rectangles, tap targets, and swipe paths can be picked directly on a dimmed overlay above the real target app. Existing configured geometry is drawn for context. Screenshot-based authoring remains a fallback.
 
-- tap point;
-- swipe path;
-- OCR rectangle.
+The remaining important UX step is true edit-in-place for existing geometry with selection handles/redraw while preserving the item's id.
 
-Coordinates are converted to normalized `0..1` geometry and stored in the profile. The user normally sees the visual picker rather than raw coordinates; numeric editing remains available under the advanced controls.
+## Logs and history
 
-A screenshot-based picker remains available as a fallback, especially for whole-screen profiles.
+Runs persist start/end/outcome/logs as local JSON. Active logs are checkpointed to disk during execution. Script `log()` messages, actions, target-app pause transitions, and runtime errors use the same logging path. Long-run viewer ergonomics (filter/search/export/follow) are still planned.
 
-## Persistent run history
+## Script variability
 
-Each completed run is stored locally as JSON under the application's private files directory. A record contains profile identity, start/end time, duration, final outcome, and the captured automation log entries.
-
-The history viewer allows recent runs to be reopened after the automation stops. Tap/swipe execution, runtime errors, target-app pause/resume transitions, and script log messages flow through the same logger.
-
-The current retention strategy caps the in-memory log list per run but does not yet enforce an age or disk-size policy. Export, filtering, and retention settings are follow-up work.
-
-## Pause ownership
-
-Runtime pause requests are tokenized. Manual pause and future overlay-workspace pause are independent owners. Releasing one token cannot accidentally resume a session still paused by another owner.
-
-This is important for the upcoming on-top editor: opening or closing a workspace must never override an explicit user pause.
-
-## Current device-validation targets
-
-Before merging this work into `master`, validate on a physical device:
-
-1. Grant overlay permission and enable the bubble.
-2. Drag it around the screen and reopen its menu.
-3. Select a target app and pick a tap, swipe, and OCR rectangle directly on that app.
-4. Run the profile, switch to another app, and confirm `PAUSED` plus a history log entry.
-5. Return to the target and confirm automatic resume.
-6. Stop the run and reopen its complete log from Run history.
-7. Rotate the target app and check visual picker/capture coordinate alignment.
+Both deterministic and explicit randomized commands are supported. `tapRandom`, `swipeRandom`, and `waitRandom` add bounded execution-time variability while leaving the underlying named targets unchanged. See `docs/SCRIPTING.md`.

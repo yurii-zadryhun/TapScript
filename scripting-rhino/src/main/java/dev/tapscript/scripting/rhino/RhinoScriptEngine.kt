@@ -46,12 +46,37 @@ class RhinoScriptEngine(
         putFunction(scope, "tap") { args ->
             addCommand(commands, AutomationCommand.Tap(requiredString(args, 0, "tap")))
         }
+        putFunction(scope, "tapRandom") { args ->
+            addCommand(
+                commands,
+                AutomationCommand.RandomTap(
+                    targetId = requiredString(args, 0, "tapRandom"),
+                    radiusPx = requiredLong(args, 1, "tapRandom").coerceIn(0, MAX_POSITION_JITTER_PX.toLong()).toInt(),
+                ),
+            )
+        }
         putFunction(scope, "swipe") { args ->
             addCommand(commands, AutomationCommand.Swipe(requiredString(args, 0, "swipe")))
         }
+        putFunction(scope, "swipeRandom") { args ->
+            addCommand(
+                commands,
+                AutomationCommand.RandomSwipe(
+                    targetId = requiredString(args, 0, "swipeRandom"),
+                    radiusPx = requiredLong(args, 1, "swipeRandom").coerceIn(0, MAX_POSITION_JITTER_PX.toLong()).toInt(),
+                    durationJitterMs = optionalLong(args, 2, 0).coerceIn(0, MAX_WAIT_MS),
+                ),
+            )
+        }
         putFunction(scope, "waitMs") { args ->
-            val duration = Context.toNumber(args.getOrNull(0)).toLong().coerceIn(0, 60_000)
+            val duration = requiredLong(args, 0, "waitMs").coerceIn(0, MAX_WAIT_MS)
             addCommand(commands, AutomationCommand.Wait(duration))
+        }
+        putFunction(scope, "waitRandom") { args ->
+            val min = requiredLong(args, 0, "waitRandom").coerceIn(0, MAX_WAIT_MS)
+            val max = requiredLong(args, 1, "waitRandom").coerceIn(0, MAX_WAIT_MS)
+            require(min <= max) { "waitRandom minimum must not exceed maximum" }
+            addCommand(commands, AutomationCommand.RandomWait(min, max))
         }
         putFunction(scope, "log") { args ->
             addCommand(commands, AutomationCommand.Log(Context.toString(args.getOrNull(0))))
@@ -82,5 +107,26 @@ class RhinoScriptEngine(
         val value = args.getOrNull(index)
         require(value != null && value != Undefined.instance) { "$function requires an action id" }
         return Context.toString(value)
+    }
+
+    private fun requiredLong(args: Array<out Any?>, index: Int, function: String): Long {
+        val value = args.getOrNull(index)
+        require(value != null && value != Undefined.instance) { "$function requires argument ${index + 1}" }
+        val number = Context.toNumber(value)
+        require(number.isFinite()) { "$function argument ${index + 1} must be a finite number" }
+        return number.toLong()
+    }
+
+    private fun optionalLong(args: Array<out Any?>, index: Int, default: Long): Long {
+        val value = args.getOrNull(index)
+        if (value == null || value == Undefined.instance) return default
+        val number = Context.toNumber(value)
+        require(number.isFinite()) { "Optional numeric argument ${index + 1} must be finite" }
+        return number.toLong()
+    }
+
+    private companion object {
+        const val MAX_POSITION_JITTER_PX = 1_000
+        const val MAX_WAIT_MS = 60_000L
     }
 }

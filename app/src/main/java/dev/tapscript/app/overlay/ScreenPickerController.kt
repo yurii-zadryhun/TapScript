@@ -175,6 +175,7 @@ class ScreenPickerController(context: Context) {
             }
 
             when (mode) {
+                ScreenPickMode.PREVIEW -> Unit
                 ScreenPickMode.POINT -> handlePoint(event)
                 ScreenPickMode.SWIPE,
                 ScreenPickMode.REGION -> handleDrag(event)
@@ -241,6 +242,7 @@ class ScreenPickerController(context: Context) {
                                 ),
                             )
                         }
+                        ScreenPickMode.PREVIEW,
                         ScreenPickMode.POINT -> Unit
                     }
                 }
@@ -286,13 +288,15 @@ class ScreenPickerController(context: Context) {
 
             val cancelWidth = 62f * density
             cancelRect.set(panel.right - cancelWidth - 10f * density, panel.top, panel.right, panel.bottom)
-            canvas.drawText("CANCEL", cancelRect.left, panel.top + 27f * density, cancelPaint)
+            canvas.drawText(if (mode == ScreenPickMode.PREVIEW) "CLOSE" else "CANCEL", cancelRect.left, panel.top + 27f * density, cancelPaint)
         }
 
         private fun drawSelection(canvas: Canvas) {
+            if (mode == ScreenPickMode.PREVIEW) return
             val x = currentX ?: return
             val y = currentY ?: return
             when (mode) {
+                ScreenPickMode.PREVIEW -> Unit
                 ScreenPickMode.POINT -> {
                     val radius = 18f * density
                     canvas.drawCircle(x, y, radius, fillPaint)
@@ -335,6 +339,7 @@ class ScreenPickerController(context: Context) {
 }
 
 enum class ScreenPickMode(val title: String, val hint: String) {
+    PREVIEW("Profile layout", "Configured OCR regions, taps, and swipes on the real app"),
     POINT("Pick tap target", "Tap the exact place TapScript should press"),
     SWIPE("Pick swipe", "Drag from the swipe start to its end"),
     REGION("Pick OCR region", "Drag a rectangle around the text to recognize"),

@@ -54,7 +54,7 @@ class CommandExecutor(
 
                 is AutomationCommand.Log -> {
                     onCommand("log")
-                    logger.info(command.message)
+                    logger.info("[script] ${command.message}")
                 }
             }
         }

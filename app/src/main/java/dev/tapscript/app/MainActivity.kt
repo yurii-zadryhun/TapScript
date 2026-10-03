@@ -1,6 +1,7 @@
 package dev.tapscript.app
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -41,6 +42,7 @@ class MainActivity : ComponentActivity() {
                     viewModel = dashboardViewModel,
                     onRequestCapture = ::requestScreenCapture,
                     onOpenAccessibilitySettings = ::openAccessibilitySettings,
+                    onRequestOverlayPermission = ::openOverlayPermissionSettings,
                 )
             }
         }
@@ -57,5 +59,14 @@ class MainActivity : ComponentActivity() {
 
     private fun openAccessibilitySettings() {
         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
+
+    private fun openOverlayPermissionSettings() {
+        startActivity(
+            Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName"),
+            ),
+        )
     }
 }

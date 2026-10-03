@@ -14,7 +14,7 @@ val signingProperties = Properties().apply {
 
 android {
     namespace = "dev.tapscript.app"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "dev.tapscript.app"

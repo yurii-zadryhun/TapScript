@@ -33,6 +33,7 @@ fun DecisionRuleDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = editorDialogProperties(),
         title = { Text(if (existing == null) "Add rule" else "Edit rule") },
         text = {
             Column(
@@ -120,7 +121,6 @@ private fun buildRuleOrNull(
         actions = listOf(action),
     )
 }.getOrNull()
-
 
 private fun validateOperand(kind: OperandKind, value: String) {
     when (kind) {

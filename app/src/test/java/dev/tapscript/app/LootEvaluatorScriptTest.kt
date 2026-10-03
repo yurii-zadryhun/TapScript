@@ -9,7 +9,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class LootEvaluatorScriptTest {
-    private val engine = RhinoScriptEngine()
+    private val engine = RhinoScriptEngine(timeoutMs = 1_000)
 
     @Test
     fun balancedGreatAndGoodRollBeatsGreatPlusBad() {

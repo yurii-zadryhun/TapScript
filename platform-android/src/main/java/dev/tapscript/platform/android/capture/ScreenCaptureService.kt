@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
+import android.media.Image
 import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
@@ -31,6 +32,7 @@ class ScreenCaptureService : Service() {
     private var virtualDisplay: VirtualDisplay? = null
     private var densityDpi: Int = 1
     private var interactionSize = PixelSize(1, 1)
+    private var captureSize = PixelSize(1, 1)
     private var lastPublishedAtMs: Long = 0
 
     override fun onCreate() {
@@ -44,8 +46,11 @@ class ScreenCaptureService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_STOP -> stopCapture()
-            ACTION_START -> startCapture(intent)
+            ACTION_STOP -> workerHandler.post(::stopCapture)
+            ACTION_START -> {
+                val safeIntent = Intent(intent)
+                workerHandler.post { startCapture(safeIntent) }
+            }
         }
         return START_NOT_STICKY
     }
@@ -53,9 +58,16 @@ class ScreenCaptureService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        if (::workerHandler.isInitialized) {
+            workerHandler.removeCallbacksAndMessages(null)
+        }
         releaseCapture(stopProjection = true)
-        workerThread.quitSafely()
-        dependencies.captureStatusStore.update(CaptureState.Idle)
+        if (::workerThread.isInitialized) {
+            workerThread.quitSafely()
+        }
+        if (::dependencies.isInitialized) {
+            dependencies.captureStatusStore.update(CaptureState.Idle)
+        }
         super.onDestroy()
     }
 
@@ -105,11 +117,14 @@ class ScreenCaptureService : Service() {
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
-            workerHandler.post { stopCapture() }
+            workerHandler.post(::handleProjectionStopped)
         }
 
         override fun onCapturedContentResize(width: Int, height: Int) {
-            workerHandler.post { createOrResizeCapture(width, height) }
+            workerHandler.post {
+                runCatching { createOrResizeCapture(width, height) }
+                    .onFailure { fail(it.message ?: "Unable to resize screen capture") }
+            }
         }
     }
 
@@ -117,18 +132,29 @@ class ScreenCaptureService : Service() {
         if (sourceWidth <= 0 || sourceHeight <= 0) return
         val projection = mediaProjection ?: return
         interactionSize = PixelSize(sourceWidth, sourceHeight)
-        val captureSize = sizePolicy.resolve(sourceWidth, sourceHeight)
-        val newReader = createImageReader(captureSize)
+        val resolvedSize = sizePolicy.resolve(sourceWidth, sourceHeight)
+        val newReader = createImageReader(resolvedSize)
 
-        virtualDisplay = virtualDisplay?.also { display ->
-            display.setSurface(newReader.surface)
-            display.resize(captureSize.width, captureSize.height, densityDpi)
-        } ?: createVirtualDisplay(projection, newReader, captureSize)
+        try {
+            val display = virtualDisplay
+            if (display == null) {
+                virtualDisplay = createVirtualDisplay(projection, newReader, resolvedSize)
+            } else {
+                display.setSurface(newReader.surface)
+                display.resize(resolvedSize.width, resolvedSize.height, densityDpi)
+            }
+        } catch (throwable: Throwable) {
+            newReader.setOnImageAvailableListener(null, null)
+            newReader.close()
+            throw throwable
+        }
 
-        imageReader?.setOnImageAvailableListener(null, null)
-        imageReader?.close()
+        val oldReader = imageReader
         imageReader = newReader
-        dependencies.captureStatusStore.update(CaptureState.Active(captureSize.width, captureSize.height))
+        captureSize = resolvedSize
+        oldReader?.setOnImageAvailableListener(null, null)
+        oldReader?.close()
+        dependencies.captureStatusStore.update(CaptureState.Active(resolvedSize.width, resolvedSize.height))
     }
 
     private fun createImageReader(size: PixelSize): ImageReader =
@@ -154,8 +180,9 @@ class ScreenCaptureService : Service() {
     ) { "Unable to create virtual display" }
 
     private fun onImageAvailable(reader: ImageReader) {
-        val image = reader.acquireLatestImage() ?: return
+        val image = acquireLatestImage(reader) ?: return
         try {
+            if (reader !== imageReader) return
             val now = SystemClock.elapsedRealtime()
             if (now - lastPublishedAtMs < MIN_PUBLISH_INTERVAL_MS) return
             lastPublishedAtMs = now
@@ -166,6 +193,7 @@ class ScreenCaptureService : Service() {
                     interactionSize = interactionSize,
                 ),
             )
+            dependencies.captureStatusStore.update(CaptureState.Active(captureSize.width, captureSize.height))
         } catch (throwable: Throwable) {
             dependencies.captureStatusStore.update(
                 CaptureState.Error(throwable.message ?: "Frame conversion failed"),
@@ -173,6 +201,20 @@ class ScreenCaptureService : Service() {
         } finally {
             image.close()
         }
+    }
+
+    private fun acquireLatestImage(reader: ImageReader): Image? = try {
+        reader.acquireLatestImage()
+    } catch (_: IllegalStateException) {
+        // A queued callback can arrive after a resize closed the previous ImageReader.
+        null
+    }
+
+    private fun handleProjectionStopped() {
+        releaseCapture(stopProjection = false)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        dependencies.captureStatusStore.update(CaptureState.Idle)
+        stopSelf()
     }
 
     private fun stopCapture() {
@@ -192,12 +234,13 @@ class ScreenCaptureService : Service() {
         val projection = mediaProjection
         mediaProjection = null
         if (projection != null) {
-            projection.unregisterCallback(projectionCallback)
-            if (stopProjection) projection.stop()
+            runCatching { projection.unregisterCallback(projectionCallback) }
+            if (stopProjection) runCatching { projection.stop() }
         }
     }
 
     private fun fail(message: String) {
+        releaseCapture(stopProjection = true)
         dependencies.captureStatusStore.update(CaptureState.Error(message))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

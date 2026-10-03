@@ -23,12 +23,16 @@ internal fun ConfigItem(
     subtitle: String,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onRedraw: (() -> Unit)? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (onRedraw != null) {
+                TextButton(onClick = onRedraw) { Text("Draw") }
             }
             TextButton(onClick = onEdit) { Text("Edit") }
             TextButton(onClick = onDelete) { Text("Remove") }

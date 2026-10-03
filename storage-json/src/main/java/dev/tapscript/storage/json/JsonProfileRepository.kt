@@ -20,15 +20,10 @@ class JsonProfileRepository(
 ) : ProfileRepository {
     private val directory = File(context.filesDir, "profiles")
     private val mutex = Mutex()
+    private val backupCodec = ProfileBackupCodec(gson)
 
     override suspend fun list(): List<AutomationProfile> = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            ensureDirectory()
-            directory.listFiles { file -> file.extension == "json" }
-                .orEmpty()
-                .mapNotNull(::readProfile)
-                .sortedBy { it.name.lowercase() }
-        }
+        mutex.withLock { listUnlocked() }
     }
 
     override suspend fun get(id: String): AutomationProfile? = withContext(Dispatchers.IO) {
@@ -41,14 +36,7 @@ class JsonProfileRepository(
     override suspend fun save(profile: AutomationProfile) = withContext(Dispatchers.IO) {
         mutex.withLock {
             ensureDirectory()
-            val destination = profileFile(profile.id)
-            val temporary = File(directory, ".${profile.id}.${System.nanoTime()}.tmp")
-            try {
-                temporary.writeText(gson.toJson(profile), Charsets.UTF_8)
-                replaceFile(temporary, destination)
-            } finally {
-                temporary.delete()
-            }
+            writeProfile(profile)
         }
     }
 
@@ -56,6 +44,41 @@ class JsonProfileRepository(
         mutex.withLock {
             val file = profileFile(id)
             if (file.exists() && !file.delete()) error("Could not delete ${file.name}")
+        }
+    }
+
+    suspend fun exportBackup(): String = withContext(Dispatchers.IO) {
+        mutex.withLock { backupCodec.encode(listUnlocked()) }
+    }
+
+    /**
+     * Imports profiles by id. Existing matching ids are replaced; unrelated local profiles stay intact.
+     */
+    suspend fun importBackup(json: String): Int = withContext(Dispatchers.IO) {
+        val imported = backupCodec.decode(json)
+        mutex.withLock {
+            ensureDirectory()
+            imported.forEach(::writeProfile)
+        }
+        imported.size
+    }
+
+    private fun listUnlocked(): List<AutomationProfile> {
+        ensureDirectory()
+        return directory.listFiles { file -> file.extension == "json" }
+            .orEmpty()
+            .mapNotNull(::readProfile)
+            .sortedBy { it.name.lowercase() }
+    }
+
+    private fun writeProfile(profile: AutomationProfile) {
+        val destination = profileFile(profile.id)
+        val temporary = File(directory, ".${profile.id}.${System.nanoTime()}.tmp")
+        try {
+            temporary.writeText(gson.toJson(profile), Charsets.UTF_8)
+            replaceFile(temporary, destination)
+        } finally {
+            temporary.delete()
         }
     }
 

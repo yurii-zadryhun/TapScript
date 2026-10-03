@@ -12,6 +12,7 @@ internal fun ProfileRegionsSection(
     onAdd: () -> Unit,
     onEdit: (RecognitionRegion) -> Unit,
     onDelete: (RecognitionRegion) -> Unit,
+    onRedraw: ((RecognitionRegion) -> Unit)? = null,
 ) {
     EditorSection("Recognition regions") {
         if (regions.isEmpty()) Hint("No regions. Add a small rectangle around text you want to read.")
@@ -21,6 +22,7 @@ internal fun ProfileRegionsSection(
                 subtitle = "${region.id} • ${region.bounds.compact()} • ${region.textConfig.extractors.size} extractor(s)",
                 onEdit = { onEdit(region) },
                 onDelete = { onDelete(region) },
+                onRedraw = onRedraw?.let { redraw -> { redraw(region) } },
             )
         }
         OutlinedButton(onClick = onAdd) { Text("Add text region") }

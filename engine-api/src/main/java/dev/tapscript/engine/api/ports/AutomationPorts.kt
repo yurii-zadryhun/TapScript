@@ -2,6 +2,7 @@ package dev.tapscript.engine.api.ports
 
 import dev.tapscript.engine.api.command.AutomationCommand
 import dev.tapscript.engine.api.model.AutomationProfile
+import dev.tapscript.engine.api.model.AutomationRunRecord
 import dev.tapscript.engine.api.model.AutomationSnapshot
 import dev.tapscript.engine.api.model.PixelPoint
 
@@ -29,6 +30,17 @@ interface ProfileRepository {
     suspend fun get(id: String): AutomationProfile?
     suspend fun save(profile: AutomationProfile)
     suspend fun delete(id: String)
+}
+
+interface SessionHistoryRepository {
+    suspend fun list(limit: Int = 100): List<AutomationRunRecord>
+    suspend fun save(record: AutomationRunRecord)
+    suspend fun delete(id: String)
+    suspend fun clear()
+}
+
+interface ForegroundAppReader {
+    fun currentPackage(): String?
 }
 
 interface AutomationLogger {

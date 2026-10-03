@@ -27,6 +27,7 @@ fun ActionTargetDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = editorDialogProperties(),
         title = { Text(if (existing == null) "Add action target" else "Edit action target") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

@@ -10,7 +10,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -18,6 +23,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun RuntimeCard(state: DashboardUiState, onStopSession: () -> Unit) {
     val session = state.sessionStatus
+    var logsExpanded by remember(session.profileId) { mutableStateOf(false) }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -51,6 +58,28 @@ internal fun RuntimeCard(state: DashboardUiState, onStopSession: () -> Unit) {
                         Text("$key = ${value.toCompactText()}", style = MaterialTheme.typography.bodySmall)
                     }
                 }
+            }
+
+            HorizontalDivider()
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    "Live logs · ${state.liveLogs.size}",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                TextButton(onClick = { logsExpanded = !logsExpanded }) {
+                    Text(if (logsExpanded) "Collapse" else "Open")
+                }
+            }
+            if (logsExpanded) {
+                LiveLogViewer(logs = state.liveLogs, modifier = Modifier.fillMaxWidth())
+            } else if (state.liveLogs.isNotEmpty()) {
+                state.liveLogs.takeLast(4).forEach { LogEntryRow(it) }
+            } else {
+                Text(
+                    "Execution and JavaScript log() output will appear here.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

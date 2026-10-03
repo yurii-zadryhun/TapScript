@@ -1,6 +1,17 @@
 package dev.tapscript.app
 
 import android.content.Context
+import dev.tapscript.app.diagnostics.CrashReportStore
+import dev.tapscript.app.logging.CompositeAutomationLogger
+import dev.tapscript.app.logging.SessionHistoryRecorder
+import dev.tapscript.app.overlay.FloatingOverlayController
+import dev.tapscript.app.overlay.OverlayWorkspaceController
+import dev.tapscript.app.overlay.ScreenPickerController
+import dev.tapscript.app.profile.ProfileTransferService
+import dev.tapscript.engine.api.model.AutomationLogEntry
+import dev.tapscript.engine.api.model.AutomationLogLevel
+import dev.tapscript.engine.api.model.AutomationRunRecord
+import dev.tapscript.engine.api.model.RunOutcome
 import dev.tapscript.engine.core.action.ActionResolver
 import dev.tapscript.engine.core.action.CommandExecutor
 import dev.tapscript.engine.core.decision.DefaultDecisionEngine
@@ -10,9 +21,12 @@ import dev.tapscript.engine.core.frame.SampledFrameChangeDetector
 import dev.tapscript.engine.core.recognition.BitmapRegionCropper
 import dev.tapscript.engine.core.recognition.RecognitionPipeline
 import dev.tapscript.engine.core.recognition.RegexValueExtractor
+import dev.tapscript.engine.core.runtime.AutomationPauseController
 import dev.tapscript.engine.core.runtime.AutomationRunner
+import dev.tapscript.platform.android.accessibility.AccessibilityForegroundAppReader
 import dev.tapscript.platform.android.accessibility.AccessibilityStatusReader
 import dev.tapscript.platform.android.accessibility.AndroidGestureDispatcher
+import dev.tapscript.platform.android.app.AndroidInstalledAppProvider
 import dev.tapscript.platform.android.app.AndroidPackageLauncher
 import dev.tapscript.platform.android.capture.CaptureServiceController
 import dev.tapscript.platform.android.capture.CaptureStatusStore
@@ -20,22 +34,35 @@ import dev.tapscript.platform.android.logging.AndroidAutomationLogger
 import dev.tapscript.recognition.mlkit.MlKitTextRecognizer
 import dev.tapscript.scripting.rhino.RhinoScriptEngine
 import dev.tapscript.storage.json.JsonProfileRepository
+import dev.tapscript.storage.json.JsonSessionHistoryRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-class AppGraph(context: Context) {
+class AppGraph(
+    context: Context,
+    private val crashReportStore: CrashReportStore,
+) {
     private val applicationContext = context.applicationContext
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    val logger = AndroidAutomationLogger()
+    private val logcatLogger = AndroidAutomationLogger()
+    val sessionHistoryRepository = JsonSessionHistoryRepository(applicationContext)
+    val historyRecorder = SessionHistoryRecorder(sessionHistoryRepository)
+    val logger = CompositeAutomationLogger(logcatLogger, historyRecorder)
+
     val frameBus = ConflatedFrameBus()
     val captureStatusStore = CaptureStatusStore()
     val captureController = CaptureServiceController(applicationContext)
     val accessibilityStatusReader = AccessibilityStatusReader(applicationContext)
+    val foregroundAppReader = AccessibilityForegroundAppReader()
     val packageLauncher = AndroidPackageLauncher(applicationContext)
+    val installedAppProvider = AndroidInstalledAppProvider(applicationContext)
     val profileRepository = JsonProfileRepository(applicationContext)
+    val profileTransferService = ProfileTransferService(applicationContext, profileRepository)
+    val screenPickerController = ScreenPickerController(applicationContext)
+    val pauseController = AutomationPauseController()
 
     private val textRecognizer = MlKitTextRecognizer()
     private val recognitionPipeline = RecognitionPipeline(
@@ -60,6 +87,8 @@ class AppGraph(context: Context) {
         recognitionPipeline = recognitionPipeline,
         decisionEngine = decisionEngine,
         commandExecutor = commandExecutor,
+        foregroundAppReader = foregroundAppReader,
+        pauseController = pauseController,
         logger = logger,
     )
 
@@ -67,14 +96,89 @@ class AppGraph(context: Context) {
         scope = applicationScope,
         profileRepository = profileRepository,
         runner = automationRunner,
+        pauseController = pauseController,
         logger = logger,
+        historyRecorder = historyRecorder,
+        captureController = captureController,
+    )
+
+    val workspaceController = OverlayWorkspaceController(
+        context = applicationContext,
+        profileRepository = profileRepository,
+        installedAppProvider = installedAppProvider,
+        frameBus = frameBus,
+        screenPickerController = screenPickerController,
+        pauseController = pauseController,
+        sessionStatus = sessionManager.status,
+        liveLogs = historyRecorder.liveLogs,
+        onStopSession = sessionManager::stop,
+    )
+
+    val overlayController = FloatingOverlayController(
+        context = applicationContext,
+        sessionStatus = sessionManager.status,
+        onOpenWorkspace = { workspaceController.open() },
+        onTogglePause = sessionManager::togglePause,
+        onStopSession = sessionManager::stop,
+        onCloseTapScript = ::shutdownRuntime,
     )
 
     fun seedDefaults() {
         applicationScope.launch {
-            if (profileRepository.list().isEmpty()) {
+            recoverLastCrash()
+            val profiles = profileRepository.list()
+            if (profiles.isEmpty()) {
                 profileRepository.save(SampleProfiles.lootEvaluator())
+            } else {
+                profiles.firstNotNullOfOrNull(SampleProfiles::upgradeLegacyLootEvaluator)
+                    ?.let { profileRepository.save(it) }
             }
         }
+    }
+
+    fun shutdownRuntime() {
+        screenPickerController.cancel(returnToTapScript = false)
+        workspaceController.close()
+        sessionManager.stop()
+        captureController.stop()
+        overlayController.closeOverlay()
+    }
+
+    private suspend fun recoverLastCrash() {
+        val crash = crashReportStore.read() ?: return
+        val errorEntry = AutomationLogEntry(
+            timestampEpochMs = crash.timestampEpochMs,
+            level = AutomationLogLevel.ERROR,
+            message = buildString {
+                append("TapScript crashed")
+                if (crash.threadName.isNotBlank()) append(" on ${crash.threadName}")
+                if (crash.stackTrace.isNotBlank()) append("\n${crash.stackTrace}")
+            },
+        )
+
+        val interrupted = sessionHistoryRepository.list(50)
+            .firstOrNull { it.outcome == RunOutcome.RUNNING }
+        val recovered = if (interrupted != null) {
+            interrupted.copy(
+                endedAtEpochMs = crash.timestampEpochMs,
+                outcome = RunOutcome.ERROR,
+                logs = (interrupted.logs + errorEntry).takeLast(MAX_RECOVERED_LOGS),
+            )
+        } else {
+            AutomationRunRecord(
+                profileId = "",
+                profileName = "TapScript crash",
+                startedAtEpochMs = crash.timestampEpochMs,
+                endedAtEpochMs = crash.timestampEpochMs,
+                outcome = RunOutcome.ERROR,
+                logs = listOf(errorEntry),
+            )
+        }
+        sessionHistoryRepository.save(recovered)
+        crashReportStore.clear()
+    }
+
+    private companion object {
+        const val MAX_RECOVERED_LOGS = 5_000
     }
 }

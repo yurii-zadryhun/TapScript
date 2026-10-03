@@ -20,23 +20,24 @@ fun TextRegionDialog(
     val generatedId = remember(existing?.id) { existing?.id ?: "region-${java.util.UUID.randomUUID().toString().take(8)}" }
     var id by remember(existing?.id) { mutableStateOf(generatedId) }
     var name by remember(existing?.id) { mutableStateOf(existing?.name ?: "Text region") }
-    var left by remember { mutableStateOf(existing?.bounds?.left?.toString() ?: "0.1") }
-    var top by remember { mutableStateOf(existing?.bounds?.top?.toString() ?: "0.1") }
-    var right by remember { mutableStateOf(existing?.bounds?.right?.toString() ?: "0.9") }
-    var bottom by remember { mutableStateOf(existing?.bounds?.bottom?.toString() ?: "0.2") }
-    var variable by remember { mutableStateOf(extractor?.variable.orEmpty()) }
-    var pattern by remember { mutableStateOf(extractor?.pattern ?: "\\+(?<value>\\d+(?:[.,]\\d+)?)%") }
-    var matchMode by remember { mutableStateOf(extractor?.matchMode ?: MatchMode.FIRST) }
-    var valueGroup by remember {
+    var left by remember(existing?.id) { mutableStateOf(existing?.bounds?.left?.toString() ?: "0.1") }
+    var top by remember(existing?.id) { mutableStateOf(existing?.bounds?.top?.toString() ?: "0.1") }
+    var right by remember(existing?.id) { mutableStateOf(existing?.bounds?.right?.toString() ?: "0.9") }
+    var bottom by remember(existing?.id) { mutableStateOf(existing?.bounds?.bottom?.toString() ?: "0.2") }
+    var variable by remember(existing?.id) { mutableStateOf(extractor?.variable.orEmpty()) }
+    var pattern by remember(existing?.id) { mutableStateOf(extractor?.pattern ?: "\\+(?<value>\\d+(?:[.,]\\d+)?)%") }
+    var matchMode by remember(existing?.id) { mutableStateOf(extractor?.matchMode ?: MatchMode.FIRST) }
+    var valueGroup by remember(existing?.id) {
         mutableStateOf(extractor?.fields?.firstOrNull { it.name == "value" }?.group ?: "value")
     }
-    var valueType by remember {
+    var valueType by remember(existing?.id) {
         mutableStateOf(extractor?.fields?.firstOrNull { it.name == "value" }?.type ?: ValueType.NUMBER)
     }
-    var nameGroup by remember {
+    var nameGroup by remember(existing?.id) {
         mutableStateOf(extractor?.fields?.firstOrNull { it.name == "name" }?.group.orEmpty())
     }
-    var ignoreCase by remember { mutableStateOf(extractor?.ignoreCase ?: false) }
+    var ignoreCase by remember(existing?.id) { mutableStateOf(extractor?.ignoreCase ?: false) }
+    var showAdvancedCoordinates by remember(existing?.id) { mutableStateOf(existing == null) }
 
     val region = buildRegionOrNull(
         existing, id, name, left, top, right, bottom,
@@ -46,6 +47,7 @@ fun TextRegionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = editorDialogProperties(),
         title = { Text(if (existing == null) "Add text region" else "Edit text region") },
         text = {
             Column(
@@ -53,13 +55,29 @@ fun TextRegionDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 IdentityFields(id, { id = it.trim() }, name, { name = it })
-                RectangleFields(left, { left = it }, top, { top = it }, right, { right = it }, bottom, { bottom = it })
+
+                region?.let {
+                    Text(
+                        "Area: ${it.bounds.asPercentText()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = { showAdvancedCoordinates = !showAdvancedCoordinates }) {
+                    Text(if (showAdvancedCoordinates) "Hide advanced coordinates" else "Advanced coordinates")
+                }
+                if (showAdvancedCoordinates) {
+                    RectangleFields(left, { left = it }, top, { top = it }, right, { right = it }, bottom, { bottom = it })
+                }
+
+                HorizontalDivider()
                 Text("Extractor", style = MaterialTheme.typography.labelMedium)
                 OutlinedTextField(
                     value = variable,
                     onValueChange = { variable = it.trim() },
                     label = { Text("Output variable") },
                     placeholder = { Text("candidate.attackSpeed") },
+                    supportingText = { Text("Leave empty if you only need raw OCR text for inspection.") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
@@ -67,7 +85,9 @@ fun TextRegionDialog(
                     value = pattern,
                     onValueChange = { pattern = it },
                     label = { Text("Regex") },
-                    supportingText = { Text(if (regexValid) "Use named groups, e.g. (?<value>...)" else "Invalid regular expression") },
+                    supportingText = {
+                        Text(if (regexValid) "Use named groups, e.g. (?<value>...)" else "Invalid regular expression")
+                    },
                     isError = !regexValid,
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
@@ -137,6 +157,14 @@ private fun RectangleFields(
     }
 }
 
+private fun NormalizedRect.asPercentText(): String =
+    "L %.1f%% · T %.1f%% · R %.1f%% · B %.1f%%".format(
+        left * 100f,
+        top * 100f,
+        right * 100f,
+        bottom * 100f,
+    )
+
 private fun buildRegionOrNull(
     existing: RecognitionRegion?,
     id: String,
@@ -160,7 +188,12 @@ private fun buildRegionOrNull(
     RecognitionRegion(
         id = id.requireId(),
         name = name.ifBlank { id },
-        bounds = NormalizedRect(left.requireUnitFloat(), top.requireUnitFloat(), right.requireUnitFloat(), bottom.requireUnitFloat()),
+        bounds = NormalizedRect(
+            left.requireUnitFloat(),
+            top.requireUnitFloat(),
+            right.requireUnitFloat(),
+            bottom.requireUnitFloat(),
+        ),
         enabled = existing?.enabled ?: true,
         recognizer = RecognizerKind.TEXT,
         textConfig = TextRecognitionConfig(

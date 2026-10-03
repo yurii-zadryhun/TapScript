@@ -1,14 +1,28 @@
 package dev.tapscript.app.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.tapscript.engine.api.model.AutomationProfile
+import dev.tapscript.platform.android.app.LaunchableAppInfo
 
 @Composable
-internal fun ProfileIdentitySection(profile: AutomationProfile, onChange: (AutomationProfile) -> Unit) {
+internal fun ProfileIdentitySection(
+    profile: AutomationProfile,
+    installedApps: List<LaunchableAppInfo>,
+    onChange: (AutomationProfile) -> Unit,
+) {
+    var appPickerOpen by remember { mutableStateOf(false) }
+
     EditorSection("Identity") {
         OutlinedTextField(
             value = profile.name,
@@ -17,15 +31,132 @@ internal fun ProfileIdentitySection(profile: AutomationProfile, onChange: (Autom
             label = { Text("Profile name") },
             singleLine = true,
         )
-        OutlinedTextField(
-            value = profile.targetPackage,
-            onValueChange = { onChange(profile.copy(targetPackage = it.trim())) },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Target package (optional)") },
-            placeholder = { Text("com.example.game") },
-            singleLine = true,
+
+        Text("Automation scope", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = profile.targetPackage.isBlank(),
+                onClick = { onChange(profile.copy(targetPackage = "")) },
+                label = { Text("Whole screen") },
+            )
+            FilterChip(
+                selected = profile.targetPackage.isNotBlank(),
+                onClick = { appPickerOpen = true },
+                label = { Text("Specific app") },
+            )
+        }
+
+        if (profile.targetPackage.isNotBlank()) {
+            val selected = installedApps.firstOrNull { it.packageName == profile.targetPackage }
+            OutlinedButton(
+                onClick = { appPickerOpen = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    selected?.let { AppIcon(it) }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(selected?.label ?: "Selected app")
+                        Text(
+                            profile.targetPackage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            Text(
+                "TapScript launches this app when the profile starts, pauses when it leaves the foreground, and resumes when it returns.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
+    if (appPickerOpen) {
+        AppPickerDialog(
+            apps = installedApps,
+            onDismiss = { appPickerOpen = false },
+            onSelected = { app ->
+                onChange(profile.copy(targetPackage = app.packageName))
+                appPickerOpen = false
+            },
         )
     }
+}
+
+@Composable
+private fun AppPickerDialog(
+    apps: List<LaunchableAppInfo>,
+    onDismiss: () -> Unit,
+    onSelected: (LaunchableAppInfo) -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val filtered = remember(apps, query) {
+        val needle = query.trim()
+        if (needle.isBlank()) apps else apps.filter {
+            it.label.contains(needle, ignoreCase = true) ||
+                it.packageName.contains(needle, ignoreCase = true)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = editorDialogProperties(),
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        title = { Text("Choose target app") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Search") },
+                    singleLine = true,
+                )
+                if (filtered.isEmpty()) {
+                    Text(
+                        "No launchable apps match this search.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        items(filtered, key = { it.packageName }) { app ->
+                            TextButton(
+                                onClick = { onSelected(app) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    AppIcon(app)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(app.label)
+                                        Text(
+                                            app.packageName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+    )
 }
 
 @Composable

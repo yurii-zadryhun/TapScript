@@ -1,24 +1,37 @@
 package dev.tapscript.app
 
-import dev.tapscript.engine.api.model.*
+import dev.tapscript.engine.api.model.ActionKind
+import dev.tapscript.engine.api.model.ActionTarget
+import dev.tapscript.engine.api.model.AutomationLogic
+import dev.tapscript.engine.api.model.AutomationProfile
+import dev.tapscript.engine.api.model.LogicMode
+import dev.tapscript.engine.api.model.MatchMode
+import dev.tapscript.engine.api.model.NormalizedPoint
+import dev.tapscript.engine.api.model.NormalizedRect
+import dev.tapscript.engine.api.model.RecognitionRegion
+import dev.tapscript.engine.api.model.RegexExtractorSpec
+import dev.tapscript.engine.api.model.RegexFieldSpec
+import dev.tapscript.engine.api.model.RuntimeSettings
+import dev.tapscript.engine.api.model.TextRecognitionConfig
+import dev.tapscript.engine.api.model.ValueType
 
 object SampleProfiles {
+    private const val LOOT_PROFILE_ID = "sample-loot-evaluator"
+
     fun lootEvaluator(): AutomationProfile = AutomationProfile(
-        id = "sample-loot-evaluator",
-        name = "Loot evaluator demo",
-        targetPackage = "",
+        id = LOOT_PROFILE_ID,
+        name = "Dungeon Rush loot evaluator",
+        targetPackage = "com.lavalabs.dungeonrush",
         regions = listOf(
             statsRegion(
                 id = "equipped",
-                name = "Equipped item stats",
+                name = "Equipped item",
                 bounds = NormalizedRect(0.32f, 0.54f, 0.92f, 0.68f),
-                variable = "equipped.stats",
             ),
             statsRegion(
                 id = "candidate",
-                name = "Candidate item stats",
+                name = "Candidate item",
                 bounds = NormalizedRect(0.32f, 0.70f, 0.92f, 0.83f),
-                variable = "candidate.stats",
             ),
         ),
         actions = listOf(
@@ -37,7 +50,7 @@ object SampleProfiles {
         ),
         logic = AutomationLogic(
             mode = LogicMode.JAVASCRIPT,
-            script = SAMPLE_SCRIPT.trimIndent(),
+            script = LootEvaluatorScript.source,
         ),
         settings = RuntimeSettings(
             minFrameIntervalMs = 120,
@@ -46,11 +59,37 @@ object SampleProfiles {
         ),
     )
 
+    /**
+     * Updates only the known first-generation demo script. User-authored scripts are never overwritten.
+     * Geometry, target app, names, actions, and runtime settings stay untouched.
+     */
+    fun upgradeLegacyLootEvaluator(profile: AutomationProfile): AutomationProfile? {
+        if (profile.id != LOOT_PROFILE_ID) return null
+        val script = profile.logic.script
+        val looksLikeLegacyDemo =
+            script.contains("Candidate wins:") &&
+                script.contains("\"Triple Hit Chance\": 140") &&
+                !script.contains("mega crit chance", ignoreCase = true)
+        if (!looksLikeLegacyDemo) return null
+
+        val newRegionConfig = lootEvaluator().regions.associateBy { it.id }
+        return profile.copy(
+            regions = profile.regions.map { region ->
+                newRegionConfig[region.id]?.let { replacement ->
+                    region.copy(textConfig = replacement.textConfig)
+                } ?: region
+            },
+            logic = profile.logic.copy(
+                mode = LogicMode.JAVASCRIPT,
+                script = LootEvaluatorScript.source,
+            ),
+        )
+    }
+
     private fun statsRegion(
         id: String,
         name: String,
         bounds: NormalizedRect,
-        variable: String,
     ) = RecognitionRegion(
         id = id,
         name = name,
@@ -58,65 +97,24 @@ object SampleProfiles {
         textConfig = TextRecognitionConfig(
             extractors = listOf(
                 RegexExtractorSpec(
-                    variable = variable,
-                    pattern = "\\+(?<amount>\\d+(?:[.,]\\d+)?)%\\s+(?<name>[^\\n]+)",
+                    variable = "$id.stats",
+                    pattern = "(?<amount>[+-]?\\d+(?:[.,]\\d+)?)%\\s+(?<name>[^\\n]+)",
                     matchMode = MatchMode.ALL,
                     fields = listOf(
                         RegexFieldSpec("value", "amount", ValueType.NUMBER),
                         RegexFieldSpec("name", "name", ValueType.TEXT),
                     ),
                 ),
+                RegexExtractorSpec(
+                    variable = "$id.level",
+                    pattern = "(?:Lv\\.?|Lvl\\.?|Level)\\s*[:.]?\\s*(?<value>\\d{1,3})",
+                    matchMode = MatchMode.FIRST,
+                    fields = listOf(
+                        RegexFieldSpec("value", "value", ValueType.NUMBER),
+                    ),
+                    ignoreCase = true,
+                ),
             ),
         ),
     )
-
-    private const val SAMPLE_SCRIPT = """
-const caps = {
-  "Attack Speed": 40,
-  "Double Hit Chance": 40,
-  "Critical Damage": 100,
-  "Damage": 15,
-  "Lifesteal": 20,
-  "Triple Hit Chance": 30
-};
-
-const weights = {
-  "Attack Speed": 100,
-  "Double Hit Chance": 100,
-  "Critical Damage": 80,
-  "Damage": 50,
-  "Lifesteal": 15,
-  "Triple Hit Chance": 140
-};
-
-function score(rows) {
-  if (!rows) return 0;
-  let total = 0;
-  rows.forEach(function (row) {
-    const cap = caps[row.name];
-    const weight = weights[row.name];
-    if (cap && weight) total += (Number(row.value) / cap) * weight;
-  });
-  return total;
-}
-
-const candidateRows = vars.candidate && vars.candidate.stats;
-const equippedRows = vars.equipped && vars.equipped.stats;
-
-if (!candidateRows || !candidateRows.length || !equippedRows || !equippedRows.length) {
-  log("Waiting for both item stat regions to parse");
-} else {
-  const candidateScore = score(candidateRows);
-  const equippedScore = score(equippedRows);
-
-  if (candidateScore > equippedScore) {
-    log("Candidate wins: " + candidateScore.toFixed(1) + " > " + equippedScore.toFixed(1));
-    tap("equip");
-  } else {
-    log("Keep equipped: " + equippedScore.toFixed(1) + " >= " + candidateScore.toFixed(1));
-    tap("sell");
-  }
-  waitMs(120);
-}
-"""
 }

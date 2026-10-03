@@ -29,10 +29,7 @@ class CaptureServiceController(
     }
 
     fun stop() {
-        context.startService(
-            Intent(context, ScreenCaptureService::class.java)
-                .setAction(ScreenCaptureService.ACTION_STOP),
-        )
+        context.stopService(Intent(context, ScreenCaptureService::class.java))
     }
 
     fun isPermissionResultValid(resultCode: Int, resultData: Intent?): Boolean =

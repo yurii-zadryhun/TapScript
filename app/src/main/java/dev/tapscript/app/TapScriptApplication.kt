@@ -1,6 +1,7 @@
 package dev.tapscript.app
 
 import android.app.Application
+import dev.tapscript.app.diagnostics.CrashReportStore
 import dev.tapscript.engine.api.ports.ScreenFrameSink
 import dev.tapscript.platform.android.capture.CaptureStatusStore
 import dev.tapscript.platform.android.capture.ScreenCaptureServiceDependencies
@@ -17,7 +18,8 @@ class TapScriptApplication : Application(), ScreenCaptureServiceDependencies {
 
     override fun onCreate() {
         super.onCreate()
-        graph = AppGraph(this)
+        val crashReportStore = CrashReportStore(this).also { it.install() }
+        graph = AppGraph(this, crashReportStore)
         graph.seedDefaults()
     }
 }

@@ -16,4 +16,5 @@ dependencies {
     implementation(project(":engine-api"))
     implementation(libs.gson)
     implementation(libs.coroutines.core)
+    testImplementation(libs.junit)
 }

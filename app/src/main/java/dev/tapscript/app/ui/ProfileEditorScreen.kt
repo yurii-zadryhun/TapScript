@@ -11,6 +11,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.tapscript.app.overlay.ScreenPickMode
+import dev.tapscript.app.overlay.ScreenPickResult
+import dev.tapscript.app.overlay.ScreenPickerState
 import dev.tapscript.engine.api.model.*
 import dev.tapscript.platform.android.app.LaunchableAppInfo
 
@@ -18,6 +21,10 @@ import dev.tapscript.platform.android.app.LaunchableAppInfo
 fun ProfileEditorScreen(
     initialProfile: AutomationProfile,
     installedApps: List<LaunchableAppInfo>,
+    overlayPermissionGranted: Boolean,
+    screenPickerState: ScreenPickerState,
+    onBeginLivePick: (AutomationProfile, ScreenPickMode) -> Unit,
+    onConsumeLivePick: (Long) -> Unit,
     onCancel: () -> Unit,
     onSave: (AutomationProfile) -> Unit,
 ) {
@@ -46,6 +53,25 @@ fun ProfileEditorScreen(
         }
     }
 
+    LaunchedEffect(screenPickerState.resultSequence, screenPickerState.result) {
+        val result = screenPickerState.result ?: return@LaunchedEffect
+        when (result) {
+            is ScreenPickResult.Point -> {
+                editingAction = ProfileDraftFactory.tapTarget(result.point)
+                actionDialogOpen = true
+            }
+            is ScreenPickResult.Swipe -> {
+                editingAction = ProfileDraftFactory.swipeTarget(result.start, result.end)
+                actionDialogOpen = true
+            }
+            is ScreenPickResult.Region -> {
+                editingRegion = ProfileDraftFactory.textRegion(result.bounds)
+                regionDialogOpen = true
+            }
+        }
+        onConsumeLivePick(screenPickerState.resultSequence)
+    }
+
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -61,6 +87,10 @@ fun ProfileEditorScreen(
             ProfileRuntimeSection(profile) { profile = it }
             AuthoringReferenceSection(
                 bitmap = referenceBitmap,
+                livePickerAvailable = overlayPermissionGranted && profile.targetPackage.isNotBlank(),
+                onPickLiveRegion = { onBeginLivePick(profile, ScreenPickMode.REGION) },
+                onPickLiveTap = { onBeginLivePick(profile, ScreenPickMode.POINT) },
+                onPickLiveSwipe = { onBeginLivePick(profile, ScreenPickMode.SWIPE) },
                 onImportScreenshot = { screenshotPicker.launch("image/*") },
                 onDrawRegion = { visualPickMode = VisualPickMode.REGION },
                 onPlaceTap = { visualPickMode = VisualPickMode.POINT },
@@ -181,7 +211,7 @@ private fun EditorHeader(onCancel: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Text("Profile editor", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(
-                "Configure regions and actions as data; reserve JavaScript for real logic.",
+                "Configure regions and actions visually; reserve JavaScript for real logic.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

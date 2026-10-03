@@ -2,7 +2,7 @@
 
 Canonical current-state backlog. Keep this file short and actionable. Every completed development action must update this file; rewrite the current state instead of adding a chronological log.
 
-**Current checkpoint:** `0.2.0-alpha4` contains the target-app overlay crash fix, inline overlay editing/redraw flow, validated profile backup import/export, the updated Dungeon Rush loot scorer, and the randomized scripting API. It is not build-verified until the latest CI run is green.
+**Current checkpoint:** `0.2.0-alpha4` is CI-verified (`tests + lint + debug/release build`). It contains the target-app overlay crash fix, inline overlay editing/redraw flow, validated profile backup import/export, the updated Dungeon Rush loot scorer, randomized scripting commands, and a less brittle 500 ms Rhino execution guard for realistic scripts.
 
 ## P0 — physical-device stability and correctness
 

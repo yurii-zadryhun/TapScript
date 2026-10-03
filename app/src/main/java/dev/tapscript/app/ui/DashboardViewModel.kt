@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.tapscript.app.AppGraph
 import dev.tapscript.app.overlay.FloatingOverlayState
+import dev.tapscript.app.overlay.ScreenPickMode
+import dev.tapscript.app.overlay.ScreenPickerState
 import dev.tapscript.engine.api.model.AutomationLogEntry
 import dev.tapscript.engine.api.model.AutomationProfile
 import dev.tapscript.engine.api.model.AutomationRunRecord
@@ -29,6 +31,8 @@ class DashboardViewModel(
     private val installedApps = MutableStateFlow<List<LaunchableAppInfo>>(emptyList())
     private val accessibilityEnabled = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
+
+    val screenPickerState: StateFlow<ScreenPickerState> = graph.screenPickerController.state
 
     private val contentState = combine(profiles, runHistory, installedApps) { profiles, history, apps ->
         DashboardContentState(profiles, history, apps)
@@ -116,6 +120,32 @@ class DashboardViewModel(
 
     fun setOverlayEnabled(enabled: Boolean) {
         graph.overlayController.setEnabled(enabled)
+    }
+
+    fun beginScreenPick(profile: AutomationProfile, mode: ScreenPickMode) {
+        errorMessage.value = null
+        if (!graph.overlayController.state.value.permissionGranted) {
+            errorMessage.value = "Allow display over other apps before using the live picker."
+            return
+        }
+        if (profile.targetPackage.isBlank()) {
+            errorMessage.value = "Choose a target app to use live picking. Whole-screen profiles can still use the screenshot picker."
+            return
+        }
+        graph.packageLauncher.launch(profile.targetPackage)
+            .onFailure {
+                errorMessage.value = it.message
+                return
+            }
+        viewModelScope.launch {
+            delay(450)
+            graph.screenPickerController.start(mode)
+                .onFailure { errorMessage.value = it.message }
+        }
+    }
+
+    fun consumeScreenPick(sequence: Long) {
+        graph.screenPickerController.consumeResult(sequence)
     }
 
     fun start(profile: AutomationProfile) {

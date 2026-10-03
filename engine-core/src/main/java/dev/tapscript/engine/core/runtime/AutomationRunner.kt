@@ -26,17 +26,20 @@ class AutomationRunner(
     private val decisionEngine: DecisionEngine,
     private val commandExecutor: CommandExecutor,
     private val foregroundAppReader: ForegroundAppReader,
+    private val pauseController: AutomationPauseController,
     private val logger: AutomationLogger,
 ) {
     private val mutableStatus = MutableStateFlow(AutomationSessionStatus())
     val status: StateFlow<AutomationSessionStatus> = mutableStatus
 
     suspend fun run(profile: AutomationProfile) {
+        pauseController.clear()
         changeDetector.reset()
         var afterTimestamp = 0L
         var lastProcessedAtMs = 0L
         var lastMetrics = AutomationMetrics()
         var pausedForTarget = false
+        var runtimePauseReason: String? = null
 
         mutableStatus.value = AutomationSessionStatus(
             phase = SessionPhase.WAITING_FOR_FRAME,
@@ -49,6 +52,25 @@ class AutomationRunner(
                 val frame = frameSource.awaitFrame(afterTimestamp)
                 afterTimestamp = frame.capturedAtNanos
                 try {
+                    val requestedPause = pauseController.currentReason()
+                    if (requestedPause != null) {
+                        if (runtimePauseReason != requestedPause) {
+                            logger.info("Paused '${profile.name}': $requestedPause")
+                            runtimePauseReason = requestedPause
+                        }
+                        mutableStatus.value = mutableStatus.value.copy(
+                            phase = SessionPhase.PAUSED,
+                            profileName = profile.name,
+                            message = requestedPause,
+                        )
+                        continue
+                    }
+                    if (runtimePauseReason != null) {
+                        logger.info("Resumed '${profile.name}'")
+                        runtimePauseReason = null
+                        changeDetector.reset()
+                    }
+
                     val targetPackage = profile.targetPackage.trim()
                     if (targetPackage.isNotEmpty()) {
                         val activePackage = foregroundAppReader.currentPackage()
@@ -162,6 +184,8 @@ class AutomationRunner(
                 phase = SessionPhase.ERROR,
                 message = throwable.message ?: throwable::class.java.simpleName,
             )
+        } finally {
+            pauseController.clear()
         }
     }
 

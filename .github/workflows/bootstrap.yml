@@ -22,7 +22,8 @@ jobs:
           mkdir -p .bootstrap-extracted
           cat bootstrap/part-* | base64 --decode | tar -xJ -C .bootstrap-extracted
           cp -a .bootstrap-extracted/TapScript/. .
-          rm -rf bootstrap .bootstrap-extracted .github/workflows/bootstrap.yml
+          rm -rf bootstrap .bootstrap-extracted
+          rm -f .github/workflows/android.yml
 
       - name: Commit restored source
         shell: bash

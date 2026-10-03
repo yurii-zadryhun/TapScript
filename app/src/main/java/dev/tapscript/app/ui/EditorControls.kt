@@ -59,7 +59,11 @@ internal fun <T> EnumPicker(
         OutlinedButton(onClick = { expanded = true }) {
             Text(selected?.let(text) ?: "Select…")
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            properties = editorPopupProperties(),
+        ) {
             values.forEach { value ->
                 DropdownMenuItem(
                     text = { Text(text(value)) },

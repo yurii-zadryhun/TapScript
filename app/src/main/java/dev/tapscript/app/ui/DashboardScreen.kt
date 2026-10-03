@@ -16,7 +16,6 @@ import dev.tapscript.engine.api.model.SessionPhase
 fun DashboardScreen(
     state: DashboardUiState,
     onOpenAccessibilitySettings: () -> Unit,
-    onSetOverlayEnabled: (Boolean) -> Unit,
     onRequestOverlayPermission: () -> Unit,
     onCreateProfile: () -> Unit,
     onEditProfile: (AutomationProfile) -> Unit,
@@ -48,7 +47,6 @@ fun DashboardScreen(
             item {
                 FloatingControlsCard(
                     state = state.overlayState,
-                    onSetEnabled = onSetOverlayEnabled,
                     onRequestPermission = onRequestOverlayPermission,
                 )
             }

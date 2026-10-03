@@ -47,6 +47,7 @@ fun TextRegionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = editorDialogProperties(),
         title = { Text(if (existing == null) "Add text region" else "Edit text region") },
         text = {
             Column(

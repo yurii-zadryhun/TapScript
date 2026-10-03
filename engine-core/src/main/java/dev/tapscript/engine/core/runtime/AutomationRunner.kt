@@ -32,8 +32,27 @@ class AutomationRunner(
     private val mutableStatus = MutableStateFlow(AutomationSessionStatus())
     val status: StateFlow<AutomationSessionStatus> = mutableStatus
 
+    fun reflectPause(message: String) {
+        val current = mutableStatus.value
+        if (current.phase !in setOf(SessionPhase.IDLE, SessionPhase.STOPPED, SessionPhase.ERROR)) {
+            mutableStatus.value = current.copy(
+                phase = SessionPhase.PAUSED,
+                message = message.ifBlank { "Paused" },
+            )
+        }
+    }
+
+    fun reflectResumeRequest() {
+        val current = mutableStatus.value
+        if (current.phase != SessionPhase.PAUSED) return
+        val remainingReason = pauseController.currentReason()
+        mutableStatus.value = current.copy(
+            phase = if (remainingReason == null) SessionPhase.WAITING_FOR_FRAME else SessionPhase.PAUSED,
+            message = remainingReason ?: "Resuming…",
+        )
+    }
+
     suspend fun run(profile: AutomationProfile) {
-        pauseController.clear()
         changeDetector.reset()
         var afterTimestamp = 0L
         var lastProcessedAtMs = 0L
@@ -50,27 +69,43 @@ class AutomationRunner(
 
         try {
             while (currentCoroutineContext().isActive) {
+                val pauseBeforeFrame = pauseController.currentReason()
+                if (pauseBeforeFrame != null) {
+                    if (runtimePauseReason != pauseBeforeFrame) {
+                        logger.info("Paused '${profile.name}': $pauseBeforeFrame")
+                        runtimePauseReason = pauseBeforeFrame
+                    }
+                    mutableStatus.value = mutableStatus.value.copy(
+                        phase = SessionPhase.PAUSED,
+                        profileId = profile.id,
+                        profileName = profile.name,
+                        message = pauseBeforeFrame,
+                    )
+                    delay(PAUSE_POLL_MS)
+                    continue
+                }
+                if (runtimePauseReason != null) {
+                    logger.info("Resumed '${profile.name}'")
+                    runtimePauseReason = null
+                    changeDetector.reset()
+                }
+
                 val frame = frameSource.awaitFrame(afterTimestamp)
                 afterTimestamp = frame.capturedAtNanos
                 try {
-                    val requestedPause = pauseController.currentReason()
-                    if (requestedPause != null) {
-                        if (runtimePauseReason != requestedPause) {
-                            logger.info("Paused '${profile.name}': $requestedPause")
-                            runtimePauseReason = requestedPause
+                    val pauseAfterFrame = pauseController.currentReason()
+                    if (pauseAfterFrame != null) {
+                        if (runtimePauseReason != pauseAfterFrame) {
+                            logger.info("Paused '${profile.name}': $pauseAfterFrame")
+                            runtimePauseReason = pauseAfterFrame
                         }
                         mutableStatus.value = mutableStatus.value.copy(
                             phase = SessionPhase.PAUSED,
                             profileId = profile.id,
                             profileName = profile.name,
-                            message = requestedPause,
+                            message = pauseAfterFrame,
                         )
                         continue
-                    }
-                    if (runtimePauseReason != null) {
-                        logger.info("Resumed '${profile.name}'")
-                        runtimePauseReason = null
-                        changeDetector.reset()
                     }
 
                     val targetPackage = profile.targetPackage.trim()
@@ -80,7 +115,7 @@ class AutomationRunner(
                             if (!pausedForTarget) {
                                 logger.info(
                                     "Paused '${profile.name}': target app '$targetPackage' is not active" +
-                                        (activePackage?.let { " (active: '$it')" } ?: ""),
+                                        (activePackage?.let { " (active: '$it')" } ?: " (active app unknown)"),
                                 )
                             }
                             pausedForTarget = true
@@ -88,7 +123,8 @@ class AutomationRunner(
                                 phase = SessionPhase.PAUSED,
                                 profileId = profile.id,
                                 profileName = profile.name,
-                                message = "Paused until target app is active",
+                                message = activePackage?.let { "Paused — $it is in foreground" }
+                                    ?: "Paused until target app is active",
                             )
                             continue
                         }
@@ -193,12 +229,14 @@ class AutomationRunner(
                 profileName = profile.name,
                 message = throwable.message ?: throwable::class.java.simpleName,
             )
-        } finally {
-            pauseController.clear()
         }
     }
 
     private fun recycle(frame: ScreenFrame) {
         if (!frame.bitmap.isRecycled) frame.bitmap.recycle()
+    }
+
+    private companion object {
+        const val PAUSE_POLL_MS = 80L
     }
 }

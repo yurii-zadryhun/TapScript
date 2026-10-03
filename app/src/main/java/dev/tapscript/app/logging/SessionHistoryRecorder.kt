@@ -56,8 +56,7 @@ class SessionHistoryRecorder(
     }
 
     suspend fun finish(outcome: RunOutcome) {
-        val pendingCheckpoint: Job?
-        val completed = synchronized(lock) {
+        val finalization = synchronized(lock) {
             val active = activeRun ?: return
             val now = System.currentTimeMillis()
             appendLocked(
@@ -67,18 +66,21 @@ class SessionHistoryRecorder(
                     message = "Session finished: ${outcome.name.lowercase()}",
                 ),
             )
-            pendingCheckpoint = checkpointJob
+            val pendingCheckpoint = checkpointJob
             checkpointJob = null
             activeRun = null
-            active.record.copy(
-                endedAtEpochMs = now,
-                outcome = outcome,
-                logs = active.logs.toList(),
+            Finalization(
+                pendingCheckpoint = pendingCheckpoint,
+                record = active.record.copy(
+                    endedAtEpochMs = now,
+                    outcome = outcome,
+                    logs = active.logs.toList(),
+                ),
             )
         }
 
-        pendingCheckpoint?.cancelAndJoin()
-        persistenceMutex.withLock { repository.save(completed) }
+        finalization.pendingCheckpoint?.cancelAndJoin()
+        persistenceMutex.withLock { repository.save(finalization.record) }
         mutableLiveLogs.value = emptyList()
     }
 
@@ -137,6 +139,11 @@ class SessionHistoryRecorder(
     private data class MutableRun(
         val record: AutomationRunRecord,
         val logs: MutableList<AutomationLogEntry>,
+    )
+
+    private data class Finalization(
+        val pendingCheckpoint: Job?,
+        val record: AutomationRunRecord,
     )
 
     private companion object {

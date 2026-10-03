@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -422,7 +421,7 @@ private fun OcrPreviewCard(status: AutomationSessionStatus) {
 private fun FrozenFramePreview(bitmap: Bitmap, regions: List<RecognitionRegion>) {
     EditorSection("Frozen frame") {
         Hint("The workspace hides itself for one capture frame. Configured OCR regions are outlined below.")
-        BoxWithConstraints(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 180.dp, max = 430.dp)

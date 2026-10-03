@@ -8,6 +8,7 @@ import dev.tapscript.engine.api.model.ScreenFrame
 import dev.tapscript.engine.api.model.SessionPhase
 import dev.tapscript.engine.api.ports.AutomationLogger
 import dev.tapscript.engine.api.ports.DecisionEngine
+import dev.tapscript.engine.api.ports.ForegroundAppReader
 import dev.tapscript.engine.api.ports.ScreenFrameSource
 import dev.tapscript.engine.core.action.CommandExecutor
 import dev.tapscript.engine.core.frame.SampledFrameChangeDetector
@@ -24,6 +25,7 @@ class AutomationRunner(
     private val recognitionPipeline: RecognitionPipeline,
     private val decisionEngine: DecisionEngine,
     private val commandExecutor: CommandExecutor,
+    private val foregroundAppReader: ForegroundAppReader,
     private val logger: AutomationLogger,
 ) {
     private val mutableStatus = MutableStateFlow(AutomationSessionStatus())
@@ -34,6 +36,7 @@ class AutomationRunner(
         var afterTimestamp = 0L
         var lastProcessedAtMs = 0L
         var lastMetrics = AutomationMetrics()
+        var pausedForTarget = false
 
         mutableStatus.value = AutomationSessionStatus(
             phase = SessionPhase.WAITING_FOR_FRAME,
@@ -46,6 +49,32 @@ class AutomationRunner(
                 val frame = frameSource.awaitFrame(afterTimestamp)
                 afterTimestamp = frame.capturedAtNanos
                 try {
+                    val targetPackage = profile.targetPackage.trim()
+                    if (targetPackage.isNotEmpty()) {
+                        val activePackage = foregroundAppReader.currentPackage()
+                        if (activePackage != targetPackage) {
+                            if (!pausedForTarget) {
+                                logger.info(
+                                    "Paused '${profile.name}': target app '$targetPackage' is not active" +
+                                        (activePackage?.let { " (active: '$it')" } ?: ""),
+                                )
+                            }
+                            pausedForTarget = true
+                            mutableStatus.value = mutableStatus.value.copy(
+                                phase = SessionPhase.PAUSED,
+                                profileName = profile.name,
+                                message = "Paused until target app is active",
+                            )
+                            continue
+                        }
+
+                        if (pausedForTarget) {
+                            logger.info("Resumed '${profile.name}': target app '$targetPackage' is active")
+                            pausedForTarget = false
+                            changeDetector.reset()
+                        }
+                    }
+
                     val nowMs = System.currentTimeMillis()
                     val elapsed = nowMs - lastProcessedAtMs
                     val requiredDelay = profile.settings.minFrameIntervalMs - elapsed

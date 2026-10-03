@@ -13,11 +13,11 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.ViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
-import androidx.savedstate.ViewTreeSavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.tapscript.app.ui.OverlayWorkspaceScreen
 import dev.tapscript.app.ui.theme.TapScriptTheme
 import dev.tapscript.engine.api.model.AutomationLogEntry
@@ -189,8 +189,8 @@ class OverlayWorkspaceController(
 
         val owner = OverlayLifecycleOwner().also { it.start() }
         val view = ComposeView(applicationContext)
-        ViewTreeLifecycleOwner.set(view, owner)
-        ViewTreeSavedStateRegistryOwner.set(view, owner)
+        view.setViewTreeLifecycleOwner(owner)
+        view.setViewTreeSavedStateRegistryOwner(owner)
         view.setContent {
             TapScriptTheme {
                 val workspaceState by state.collectAsState()
@@ -209,7 +209,7 @@ class OverlayWorkspaceController(
                     onConsumeLivePick = ::consumeScreenPick,
                     onFreezeFrame = ::freezeCurrentFrame,
                     onClearFrozenFrame = ::clearFrozenFrame,
-                    onTogglePause = {},
+                    onTogglePause = ::close,
                     onStopSession = onStopSession,
                     onDismissError = ::clearError,
                 )

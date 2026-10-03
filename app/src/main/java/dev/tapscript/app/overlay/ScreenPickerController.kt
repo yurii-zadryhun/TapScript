@@ -27,20 +27,22 @@ class ScreenPickerController(context: Context) {
     private val mutableState = MutableStateFlow(ScreenPickerState())
     private var pickerView: PickerView? = null
     private var resultSequence = 0L
+    private var returnToTapScriptAfterPick = true
 
     val state: StateFlow<ScreenPickerState> = mutableState
 
-    fun start(mode: ScreenPickMode): Result<Unit> = runCatching {
+    fun start(mode: ScreenPickMode, returnToTapScript: Boolean = true): Result<Unit> = runCatching {
         check(Settings.canDrawOverlays(applicationContext)) {
             "Display-over-other-apps permission is required for live picking"
         }
         cancel(returnToTapScript = false)
+        returnToTapScriptAfterPick = returnToTapScript
 
         val view = PickerView(
             context = applicationContext,
             mode = mode,
             onComplete = ::complete,
-            onCancel = { cancel() },
+            onCancel = { cancel(returnToTapScriptAfterPick) },
         )
         val layout = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -80,7 +82,7 @@ class ScreenPickerController(context: Context) {
             result = result,
             resultSequence = resultSequence,
         )
-        openTapScript()
+        if (returnToTapScriptAfterPick) openTapScript()
     }
 
     private fun openTapScript() {

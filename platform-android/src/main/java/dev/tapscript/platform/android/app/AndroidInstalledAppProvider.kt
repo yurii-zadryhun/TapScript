@@ -4,16 +4,20 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
+import android.graphics.Bitmap
 import android.os.Build
+import androidx.core.graphics.drawable.toBitmap
 
 data class LaunchableAppInfo(
     val label: String,
     val packageName: String,
+    val icon: Bitmap? = null,
 )
 
 class AndroidInstalledAppProvider(context: Context) {
     private val applicationContext = context.applicationContext
     private val packageManager = applicationContext.packageManager
+    private val iconSizePx = (48 * applicationContext.resources.displayMetrics.density).toInt().coerceAtLeast(48)
 
     fun listLaunchableApps(): List<LaunchableAppInfo> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
@@ -23,8 +27,11 @@ class AndroidInstalledAppProvider(context: Context) {
                 val packageName = resolveInfo.activityInfo?.packageName ?: return@mapNotNull null
                 if (packageName == applicationContext.packageName) return@mapNotNull null
                 LaunchableAppInfo(
-                    label = resolveInfo.loadLabel(packageManager)?.toString()?.ifBlank { packageName } ?: packageName,
+                    label = resolveInfo.loadLabel(packageManager).toString().ifBlank { packageName },
                     packageName = packageName,
+                    icon = runCatching {
+                        resolveInfo.loadIcon(packageManager).toBitmap(iconSizePx, iconSizePx, Bitmap.Config.ARGB_8888)
+                    }.getOrNull(),
                 )
             }
             .distinctBy { it.packageName }

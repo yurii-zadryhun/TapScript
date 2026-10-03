@@ -89,6 +89,7 @@ class AppGraph(context: Context) {
         pauseController = pauseController,
         logger = logger,
         historyRecorder = historyRecorder,
+        captureController = captureController,
     )
 
     val workspaceController = OverlayWorkspaceController(

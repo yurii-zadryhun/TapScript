@@ -13,6 +13,7 @@ fun TapScriptApp(
     viewModel: DashboardViewModel,
     onRequestCapture: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
+    onRequestOverlayPermission: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var editorProfile by remember { mutableStateOf<AutomationProfile?>(null) }
@@ -38,6 +39,8 @@ fun TapScriptApp(
             onRequestCapture = onRequestCapture,
             onStopCapture = viewModel::stopCapture,
             onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+            onSetOverlayEnabled = viewModel::setOverlayEnabled,
+            onRequestOverlayPermission = onRequestOverlayPermission,
             onCreateProfile = { creatingProfile = true },
             onEditProfile = { editorProfile = it },
             onDeleteProfile = viewModel::deleteProfile,

@@ -43,6 +43,7 @@ class AutomationRunner(
 
         mutableStatus.value = AutomationSessionStatus(
             phase = SessionPhase.WAITING_FOR_FRAME,
+            profileId = profile.id,
             profileName = profile.name,
             message = "Waiting for screen capture",
         )
@@ -60,6 +61,7 @@ class AutomationRunner(
                         }
                         mutableStatus.value = mutableStatus.value.copy(
                             phase = SessionPhase.PAUSED,
+                            profileId = profile.id,
                             profileName = profile.name,
                             message = requestedPause,
                         )
@@ -84,6 +86,7 @@ class AutomationRunner(
                             pausedForTarget = true
                             mutableStatus.value = mutableStatus.value.copy(
                                 phase = SessionPhase.PAUSED,
+                                profileId = profile.id,
                                 profileName = profile.name,
                                 message = "Paused until target app is active",
                             )
@@ -129,6 +132,7 @@ class AutomationRunner(
                     val snapshot = AutomationSnapshot(
                         values = values,
                         frameCapturedAtNanos = frame.capturedAtNanos,
+                        observations = observations,
                     )
 
                     val decisionStarted = System.nanoTime()
@@ -154,6 +158,7 @@ class AutomationRunner(
                     val failedRegions = observations.count { it.errorMessage != null }
                     mutableStatus.value = AutomationSessionStatus(
                         phase = SessionPhase.RUNNING,
+                        profileId = profile.id,
                         profileName = profile.name,
                         message = when {
                             decision.error != null -> "Script error: ${decision.error}"
@@ -175,6 +180,8 @@ class AutomationRunner(
         } catch (cancellation: kotlinx.coroutines.CancellationException) {
             mutableStatus.value = mutableStatus.value.copy(
                 phase = SessionPhase.STOPPED,
+                profileId = profile.id,
+                profileName = profile.name,
                 message = "Stopped",
             )
             throw cancellation
@@ -182,6 +189,8 @@ class AutomationRunner(
             logger.error("Automation session failed", throwable)
             mutableStatus.value = mutableStatus.value.copy(
                 phase = SessionPhase.ERROR,
+                profileId = profile.id,
+                profileName = profile.name,
                 message = throwable.message ?: throwable::class.java.simpleName,
             )
         } finally {

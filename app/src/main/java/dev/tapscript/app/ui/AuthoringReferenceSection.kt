@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 internal fun AuthoringReferenceSection(
     bitmap: Bitmap?,
     livePickerAvailable: Boolean,
+    onPreviewLive: () -> Unit,
     onPickLiveRegion: () -> Unit,
     onPickLiveTap: () -> Unit,
     onPickLiveSwipe: () -> Unit,
@@ -27,11 +28,16 @@ internal fun AuthoringReferenceSection(
     EditorSection("Visual setup") {
         Hint(
             if (livePickerAvailable) {
-                "Pick directly on the target app. TapScript opens it, overlays a temporary picker, then returns here with normalized coordinates."
+                "Preview all configured geometry on the dimmed target app, or draw new coordinates directly on it."
             } else {
                 "Select a target app above to pick directly on it, or use a screenshot reference for whole-screen profiles."
             },
         )
+        OutlinedButton(
+            onClick = onPreviewLive,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = livePickerAvailable,
+        ) { Text("Preview profile layout on target app") }
         Button(
             onClick = onPickLiveRegion,
             modifier = Modifier.fillMaxWidth(),

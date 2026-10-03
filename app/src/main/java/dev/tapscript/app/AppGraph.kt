@@ -4,6 +4,7 @@ import android.content.Context
 import dev.tapscript.app.logging.CompositeAutomationLogger
 import dev.tapscript.app.logging.SessionHistoryRecorder
 import dev.tapscript.app.overlay.FloatingOverlayController
+import dev.tapscript.app.overlay.ScreenPickerController
 import dev.tapscript.engine.core.action.ActionResolver
 import dev.tapscript.engine.core.action.CommandExecutor
 import dev.tapscript.engine.core.decision.DefaultDecisionEngine
@@ -48,6 +49,7 @@ class AppGraph(context: Context) {
     val packageLauncher = AndroidPackageLauncher(applicationContext)
     val installedAppProvider = AndroidInstalledAppProvider(applicationContext)
     val profileRepository = JsonProfileRepository(applicationContext)
+    val screenPickerController = ScreenPickerController(applicationContext)
 
     private val textRecognizer = MlKitTextRecognizer()
     private val recognitionPipeline = RecognitionPipeline(

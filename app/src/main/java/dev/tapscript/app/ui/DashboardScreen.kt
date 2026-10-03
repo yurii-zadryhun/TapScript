@@ -11,13 +11,10 @@ import androidx.compose.ui.unit.dp
 import dev.tapscript.engine.api.model.AutomationProfile
 import dev.tapscript.engine.api.model.AutomationRunRecord
 import dev.tapscript.engine.api.model.SessionPhase
-import dev.tapscript.platform.android.capture.CaptureState
 
 @Composable
 fun DashboardScreen(
     state: DashboardUiState,
-    onRequestCapture: () -> Unit,
-    onStopCapture: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onSetOverlayEnabled: (Boolean) -> Unit,
     onRequestOverlayPermission: () -> Unit,
@@ -45,8 +42,6 @@ fun DashboardScreen(
                 ReadinessCard(
                     accessibilityEnabled = state.accessibilityEnabled,
                     captureState = state.captureState,
-                    onRequestCapture = onRequestCapture,
-                    onStopCapture = onStopCapture,
                     onOpenAccessibilitySettings = onOpenAccessibilitySettings,
                 )
             }
@@ -68,7 +63,6 @@ fun DashboardScreen(
                     ProfileCard(
                         profile = profile,
                         canRun = state.accessibilityEnabled &&
-                            state.captureState is CaptureState.Active &&
                             state.sessionStatus.phase in setOf(SessionPhase.IDLE, SessionPhase.STOPPED, SessionPhase.ERROR),
                         onEdit = { onEditProfile(profile) },
                         onDelete = { onDeleteProfile(profile) },

@@ -31,6 +31,7 @@ class FloatingOverlayController(
     private val onOpenWorkspace: () -> Unit,
     private val onTogglePause: () -> Unit,
     private val onStopSession: () -> Unit,
+    private val onCloseTapScript: () -> Unit,
 ) {
     private val applicationContext = context.applicationContext
     private val windowManager = applicationContext.getSystemService(WindowManager::class.java)
@@ -38,8 +39,8 @@ class FloatingOverlayController(
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mutableState = MutableStateFlow(snapshotState())
 
-    private var bubbleView: View? = null
-    private var bubbleLayout: WindowManager.LayoutParams? = null
+    private var railView: View? = null
+    private var railLayout: WindowManager.LayoutParams? = null
     private var menuView: View? = null
     private var menuLayout: WindowManager.LayoutParams? = null
     private var statusDot: View? = null
@@ -61,22 +62,10 @@ class FloatingOverlayController(
         refresh()
     }
 
+    /** Floating controls are part of TapScript itself, not an independently hideable feature. */
     fun refresh() {
         mainScope.launch {
-            val permissionGranted = Settings.canDrawOverlays(applicationContext)
-            if (!permissionGranted) {
-                removeOverlay()
-            } else if (preferences.getBoolean(KEY_ENABLED, false)) {
-                showOverlay()
-            }
-            mutableState.value = snapshotState()
-        }
-    }
-
-    fun setEnabled(enabled: Boolean) {
-        preferences.edit().putBoolean(KEY_ENABLED, enabled).apply()
-        mainScope.launch {
-            if (enabled && Settings.canDrawOverlays(applicationContext)) {
+            if (Settings.canDrawOverlays(applicationContext)) {
                 showOverlay()
             } else {
                 removeOverlay()
@@ -85,14 +74,22 @@ class FloatingOverlayController(
         }
     }
 
-    private fun showOverlay() {
-        if (bubbleView != null) return
-        if (!Settings.canDrawOverlays(applicationContext)) return
+    /** Kept for older UI callers while they migrate to the always-on model. */
+    fun setEnabled(enabled: Boolean) {
+        if (enabled) refresh()
+    }
 
-        val bubble = createBubbleView()
+    fun closeOverlay() {
+        mainScope.launch { removeOverlay() }
+    }
+
+    private fun showOverlay() {
+        if (railView != null || !Settings.canDrawOverlays(applicationContext)) return
+
+        val rail = createRailView()
         val layout = WindowManager.LayoutParams(
-            dp(BUBBLE_SIZE_DP),
-            dp(BUBBLE_SIZE_DP),
+            dp(RAIL_WIDTH_DP),
+            dp(RAIL_HEIGHT_DP),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
@@ -103,34 +100,35 @@ class FloatingOverlayController(
             y = preferences.getInt(KEY_Y, dp(DEFAULT_Y_DP))
         }
 
-        bubbleView = bubble
-        bubbleLayout = layout
-        windowManager.addView(bubble, layout)
-        clampBubbleToScreen()
+        railView = rail
+        railLayout = layout
+        windowManager.addView(rail, layout)
+        clampRailToScreen()
         updateStatusViews()
         mutableState.value = snapshotState()
     }
 
     private fun removeOverlay() {
         hideMenu()
-        bubbleView?.let { view -> runCatching { windowManager.removeView(view) } }
-        bubbleView = null
-        bubbleLayout = null
+        railView?.let { view -> runCatching { windowManager.removeView(view) } }
+        railView = null
+        railLayout = null
         statusDot = null
         mutableState.value = snapshotState()
     }
 
-    private fun createBubbleView(): View {
+    private fun createRailView(): View {
         val root = FrameLayout(applicationContext).apply {
-            background = roundedBackground(BUBBLE_BACKGROUND, dp(BUBBLE_SIZE_DP / 2))
+            background = roundedBackground(RAIL_BACKGROUND, dp(18))
             elevation = dp(8).toFloat()
-            contentDescription = "TapScript floating controls"
+            contentDescription = "TapScript controls"
         }
 
         val label = TextView(applicationContext).apply {
-            text = "TS"
+            text = "TS\n⌄"
             gravity = Gravity.CENTER
-            textSize = 15f
+            textSize = 12f
+            setLineSpacing(0f, 0.92f)
             setTextColor(Color.WHITE)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
@@ -145,12 +143,11 @@ class FloatingOverlayController(
         val dot = View(applicationContext).apply {
             background = statusDotBackground(IDLE_COLOR)
         }
-        val dotSize = dp(11)
+        val dotSize = dp(10)
         root.addView(
             dot,
-            FrameLayout.LayoutParams(dotSize, dotSize, Gravity.END or Gravity.BOTTOM).apply {
-                marginEnd = dp(4)
-                bottomMargin = dp(4)
+            FrameLayout.LayoutParams(dotSize, dotSize, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+                topMargin = dp(6)
             },
         )
         statusDot = dot
@@ -167,7 +164,7 @@ class FloatingOverlayController(
         var dragged = false
 
         view.setOnTouchListener { _, event ->
-            val layout = bubbleLayout ?: return@setOnTouchListener false
+            val layout = railLayout ?: return@setOnTouchListener false
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downRawX = event.rawX
@@ -184,8 +181,8 @@ class FloatingOverlayController(
                     if (dragged) {
                         layout.x = startX + dx.toInt()
                         layout.y = startY + dy.toInt()
-                        clampBubbleToScreen()
-                        bubbleView?.let { windowManager.updateViewLayout(it, layout) }
+                        clampRailToScreen()
+                        railView?.let { windowManager.updateViewLayout(it, layout) }
                         updateMenuPosition()
                     }
                     true
@@ -214,31 +211,31 @@ class FloatingOverlayController(
         if (menuView != null) return
         val menu = LinearLayout(applicationContext).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+            setPadding(dp(14), dp(12), dp(14), dp(12))
             background = roundedBackground(PANEL_BACKGROUND, dp(18))
             elevation = dp(12).toFloat()
         }
 
-        menu.addView(textView("TapScript", 17f, Color.WHITE, bold = true))
-        profileText = textView("", 13f, SECONDARY_TEXT).also(menu::addView)
-        statusText = textView("", 13f, SECONDARY_TEXT).also(menu::addView)
-        menu.addView(spacer(dp(10)))
+        menu.addView(textView("TapScript", 16f, Color.WHITE, bold = true))
+        profileText = textView("", 12f, SECONDARY_TEXT).also(menu::addView)
+        statusText = textView("", 12f, SECONDARY_TEXT).also(menu::addView)
+        menu.addView(spacer(dp(8)))
 
-        menu.addView(actionButton("Workspace") {
+        menu.addView(actionButton("◫", "Workspace") {
             hideMenu()
             onOpenWorkspace()
         })
-        menu.addView(actionButton("Open full app") { openMainActivity() })
-        pauseButton = actionButton("Pause / resume") {
+        pauseButton = actionButton("Ⅱ", "Pause / resume") {
             onTogglePause()
+            updateStatusViews()
         }.also(menu::addView)
-        stopButton = actionButton("Stop profile") {
+        stopButton = actionButton("■", "Stop profile") {
             onStopSession()
-            hideMenu()
         }.also(menu::addView)
-        menu.addView(actionButton("Hide bubble") {
-            preferences.edit().putBoolean(KEY_ENABLED, false).apply()
+        menu.addView(actionButton("×", "Close TapScript") {
             removeOverlay()
+            onCloseTapScript()
+            closeMainActivityTask()
         })
 
         val layout = WindowManager.LayoutParams(
@@ -269,27 +266,27 @@ class FloatingOverlayController(
     }
 
     private fun updateMenuPosition() {
-        val bubble = bubbleLayout ?: return
+        val rail = railLayout ?: return
         val panel = menuLayout ?: return
         val screenWidth = applicationContext.resources.displayMetrics.widthPixels
         val panelWidth = dp(PANEL_WIDTH_DP)
-        val bubbleSize = dp(BUBBLE_SIZE_DP)
+        val railWidth = dp(RAIL_WIDTH_DP)
         val gap = dp(8)
 
-        panel.x = if (bubble.x + bubbleSize + gap + panelWidth <= screenWidth) {
-            bubble.x + bubbleSize + gap
+        panel.x = if (rail.x + railWidth + gap + panelWidth <= screenWidth) {
+            rail.x + railWidth + gap
         } else {
-            (bubble.x - panelWidth - gap).coerceAtLeast(0)
+            (rail.x - panelWidth - gap).coerceAtLeast(0)
         }
-        panel.y = bubble.y.coerceAtLeast(0)
+        panel.y = rail.y.coerceAtLeast(0)
         menuView?.let { view -> runCatching { windowManager.updateViewLayout(view, panel) } }
     }
 
-    private fun clampBubbleToScreen() {
-        val layout = bubbleLayout ?: return
+    private fun clampRailToScreen() {
+        val layout = railLayout ?: return
         val metrics = applicationContext.resources.displayMetrics
-        layout.x = layout.x.coerceIn(0, (metrics.widthPixels - dp(BUBBLE_SIZE_DP)).coerceAtLeast(0))
-        layout.y = layout.y.coerceIn(0, (metrics.heightPixels - dp(BUBBLE_SIZE_DP)).coerceAtLeast(0))
+        layout.x = layout.x.coerceIn(0, (metrics.widthPixels - dp(RAIL_WIDTH_DP)).coerceAtLeast(0))
+        layout.y = layout.y.coerceIn(0, (metrics.heightPixels - dp(RAIL_HEIGHT_DP)).coerceAtLeast(0))
     }
 
     private fun updateStatusViews() {
@@ -302,26 +299,30 @@ class FloatingOverlayController(
             button?.isEnabled = active
             button?.alpha = if (active) 1f else 0.45f
         }
+        pauseButton?.text = if (status.phase == SessionPhase.PAUSED) "▶   Resume" else "Ⅱ   Pause"
     }
 
-    private fun openMainActivity() {
+    private fun closeMainActivityTask() {
         applicationContext.startActivity(
             Intent(applicationContext, MainActivity::class.java).apply {
+                action = MainActivity.ACTION_CLOSE
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             },
         )
-        hideMenu()
     }
 
-    private fun snapshotState(): FloatingOverlayState = FloatingOverlayState(
-        permissionGranted = Settings.canDrawOverlays(applicationContext),
-        enabled = preferences.getBoolean(KEY_ENABLED, false),
-        visible = bubbleView != null,
-    )
+    private fun snapshotState(): FloatingOverlayState {
+        val permission = Settings.canDrawOverlays(applicationContext)
+        return FloatingOverlayState(
+            permissionGranted = permission,
+            enabled = permission,
+            visible = railView != null,
+        )
+    }
 
-    private fun actionButton(label: String, onClick: () -> Unit): TextView =
-        textView(label, 14f, Color.WHITE, bold = true).apply {
-            gravity = Gravity.CENTER
+    private fun actionButton(symbol: String, label: String, onClick: () -> Unit): TextView =
+        textView("$symbol   $label", 14f, Color.WHITE, bold = true).apply {
+            gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(10), dp(12), dp(10))
             background = roundedBackground(BUTTON_BACKGROUND, dp(12))
             setOnClickListener { onClick() }
@@ -371,15 +372,15 @@ class FloatingOverlayController(
 
     companion object {
         private const val PREFERENCES = "floating_overlay"
-        private const val KEY_ENABLED = "enabled"
         private const val KEY_X = "x"
         private const val KEY_Y = "y"
-        private const val BUBBLE_SIZE_DP = 54
-        private const val PANEL_WIDTH_DP = 232
-        private const val DEFAULT_X_DP = 12
+        private const val RAIL_WIDTH_DP = 42
+        private const val RAIL_HEIGHT_DP = 72
+        private const val PANEL_WIDTH_DP = 224
+        private const val DEFAULT_X_DP = 8
         private const val DEFAULT_Y_DP = 180
 
-        private val BUBBLE_BACKGROUND = Color.rgb(38, 42, 54)
+        private val RAIL_BACKGROUND = Color.rgb(38, 42, 54)
         private val PANEL_BACKGROUND = Color.rgb(30, 33, 43)
         private val BUTTON_BACKGROUND = Color.rgb(61, 67, 86)
         private val SECONDARY_TEXT = Color.rgb(194, 199, 216)

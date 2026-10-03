@@ -110,6 +110,12 @@ class AppGraph(context: Context) {
         onOpenWorkspace = { workspaceController.open() },
         onTogglePause = sessionManager::togglePause,
         onStopSession = sessionManager::stop,
+        onCloseTapScript = {
+            screenPickerController.cancel(returnToTapScript = false)
+            workspaceController.close()
+            sessionManager.stop()
+            captureController.stop()
+        },
     )
 
     fun seedDefaults() {

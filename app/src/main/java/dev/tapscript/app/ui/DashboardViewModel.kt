@@ -127,10 +127,6 @@ class DashboardViewModel(
         }
     }
 
-    fun setOverlayEnabled(enabled: Boolean) {
-        graph.overlayController.setEnabled(enabled)
-    }
-
     fun beginScreenPick(profile: AutomationProfile, mode: ScreenPickMode) {
         errorMessage.value = null
         if (!graph.overlayController.state.value.permissionGranted) {
@@ -148,7 +144,7 @@ class DashboardViewModel(
             }
         viewModelScope.launch {
             delay(450)
-            graph.screenPickerController.start(mode)
+            graph.screenPickerController.start(mode = mode, profile = profile)
                 .onFailure { errorMessage.value = it.message }
         }
     }
@@ -213,11 +209,6 @@ class DashboardViewModel(
             graph.sessionManager.stopAndJoin()
             runHistory.value = graph.sessionHistoryRepository.list()
         }
-    }
-
-    fun stopCapture() {
-        pendingStartProfileId = null
-        graph.captureController.stop()
     }
 
     fun launchTarget(profile: AutomationProfile) {

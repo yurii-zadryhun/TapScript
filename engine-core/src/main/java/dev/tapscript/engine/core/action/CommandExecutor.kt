@@ -21,7 +21,9 @@ class CommandExecutor(
         for (command in commands) {
             when (command) {
                 is AutomationCommand.Tap -> {
-                    onCommand("tap:${command.targetId}")
+                    val description = "tap:${command.targetId}"
+                    onCommand(description)
+                    logger.info("Executing $description")
                     actionResolver.resolveTap(profile, command.targetId, screenSize)
                         .fold(
                             onSuccess = { point -> gestureDispatcher.tap(point).getOrThrow() },
@@ -30,7 +32,9 @@ class CommandExecutor(
                 }
 
                 is AutomationCommand.Swipe -> {
-                    onCommand("swipe:${command.targetId}")
+                    val description = "swipe:${command.targetId}"
+                    onCommand(description)
+                    logger.info("Executing $description")
                     actionResolver.resolveSwipe(profile, command.targetId, screenSize)
                         .fold(
                             onSuccess = { swipe ->
@@ -42,7 +46,9 @@ class CommandExecutor(
 
                 is AutomationCommand.Wait -> {
                     val safeDuration = command.durationMs.coerceIn(0, 60_000)
-                    onCommand("wait:${safeDuration}ms")
+                    val description = "wait:${safeDuration}ms"
+                    onCommand(description)
+                    logger.debug("Executing $description")
                     delay(safeDuration)
                 }
 

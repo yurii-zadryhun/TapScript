@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.tapscript.engine.api.model.AutomationProfile
+import dev.tapscript.engine.api.model.AutomationRunRecord
 import dev.tapscript.engine.api.model.SessionPhase
 import dev.tapscript.platform.android.capture.CaptureState
 
@@ -24,6 +25,8 @@ fun DashboardScreen(
     onStartProfile: (AutomationProfile) -> Unit,
     onStopSession: () -> Unit,
     onLaunchTarget: (AutomationProfile) -> Unit,
+    onDeleteRun: (AutomationRunRecord) -> Unit,
+    onClearHistory: () -> Unit,
     onDismissError: () -> Unit,
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
@@ -64,6 +67,13 @@ fun DashboardScreen(
                         onLaunch = { onLaunchTarget(profile) },
                     )
                 }
+            }
+            item {
+                RunHistorySection(
+                    records = state.runHistory,
+                    onDelete = onDeleteRun,
+                    onClear = onClearHistory,
+                )
             }
             item { Spacer(Modifier.height(24.dp)) }
         }

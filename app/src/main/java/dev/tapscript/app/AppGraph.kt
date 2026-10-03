@@ -7,6 +7,7 @@ import dev.tapscript.app.logging.SessionHistoryRecorder
 import dev.tapscript.app.overlay.FloatingOverlayController
 import dev.tapscript.app.overlay.OverlayWorkspaceController
 import dev.tapscript.app.overlay.ScreenPickerController
+import dev.tapscript.app.profile.ProfileTransferService
 import dev.tapscript.engine.api.model.AutomationLogEntry
 import dev.tapscript.engine.api.model.AutomationLogLevel
 import dev.tapscript.engine.api.model.AutomationRunRecord
@@ -59,6 +60,7 @@ class AppGraph(
     val packageLauncher = AndroidPackageLauncher(applicationContext)
     val installedAppProvider = AndroidInstalledAppProvider(applicationContext)
     val profileRepository = JsonProfileRepository(applicationContext)
+    val profileTransferService = ProfileTransferService(applicationContext, profileRepository)
     val screenPickerController = ScreenPickerController(applicationContext)
     val pauseController = AutomationPauseController()
 
@@ -124,8 +126,12 @@ class AppGraph(
     fun seedDefaults() {
         applicationScope.launch {
             recoverLastCrash()
-            if (profileRepository.list().isEmpty()) {
+            val profiles = profileRepository.list()
+            if (profiles.isEmpty()) {
                 profileRepository.save(SampleProfiles.lootEvaluator())
+            } else {
+                profiles.firstNotNullOfOrNull(SampleProfiles::upgradeLegacyLootEvaluator)
+                    ?.let { profileRepository.save(it) }
             }
         }
     }

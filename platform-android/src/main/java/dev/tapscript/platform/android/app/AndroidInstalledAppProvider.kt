@@ -3,6 +3,8 @@ package dev.tapscript.platform.android.app
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
+import android.os.Build
 
 data class LaunchableAppInfo(
     val label: String,
@@ -15,8 +17,7 @@ class AndroidInstalledAppProvider(context: Context) {
 
     fun listLaunchableApps(): List<LaunchableAppInfo> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val flags = PackageManager.ResolveInfoFlags.of(0)
-        return packageManager.queryIntentActivities(intent, flags)
+        return queryLaunchableActivities(intent)
             .asSequence()
             .mapNotNull { resolveInfo ->
                 val packageName = resolveInfo.activityInfo?.packageName ?: return@mapNotNull null
@@ -30,4 +31,12 @@ class AndroidInstalledAppProvider(context: Context) {
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
             .toList()
     }
+
+    private fun queryLaunchableActivities(intent: Intent): List<ResolveInfo> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0))
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.queryIntentActivities(intent, 0)
+        }
 }

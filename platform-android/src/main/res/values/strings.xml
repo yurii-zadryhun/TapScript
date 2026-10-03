@@ -1,0 +1,4 @@
+<resources>
+    <string name="accessibility_service_label">TapScript Automation</string>
+    <string name="accessibility_service_description">Dispatches taps and swipes requested by your local TapScript profiles.</string>
+</resources>

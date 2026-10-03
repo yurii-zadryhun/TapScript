@@ -1,0 +1,6 @@
+# Copy to signing.properties (ignored by git).
+# Prefer an absolute path on your machine.
+storeFile=/home/you/.android/tapscript-release.jks
+storePassword=change-me
+keyAlias=tapscript
+keyPassword=change-me

@@ -100,7 +100,6 @@ class AppGraph(context: Context) {
         pauseController = pauseController,
         sessionStatus = sessionManager.status,
         liveLogs = historyRecorder.liveLogs,
-        onTogglePause = sessionManager::togglePause,
         onStopSession = sessionManager::stop,
     )
 

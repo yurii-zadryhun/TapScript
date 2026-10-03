@@ -17,17 +17,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +51,7 @@ import dev.tapscript.app.overlay.OverlayWorkspaceState
 import dev.tapscript.app.overlay.ScreenPickMode
 import dev.tapscript.app.overlay.ScreenPickResult
 import dev.tapscript.app.overlay.ScreenPickerState
+import dev.tapscript.engine.api.model.ActionKind
 import dev.tapscript.engine.api.model.ActionTarget
 import dev.tapscript.engine.api.model.AutomationLogEntry
 import dev.tapscript.engine.api.model.AutomationProfile
@@ -64,10 +60,11 @@ import dev.tapscript.engine.api.model.DecisionRule
 import dev.tapscript.engine.api.model.NormalizedPoint
 import dev.tapscript.engine.api.model.RecognitionRegion
 import dev.tapscript.engine.api.model.SessionPhase
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
+/**
+ * Overlay-safe workspace. It intentionally avoids AlertDialog, Dialog and DropdownMenu because those
+ * create child Android windows that do not have an Activity token when hosted in TYPE_APPLICATION_OVERLAY.
+ */
 @Composable
 fun OverlayWorkspaceScreen(
     state: OverlayWorkspaceState,
@@ -77,7 +74,7 @@ fun OverlayWorkspaceScreen(
     onClose: () -> Unit,
     onSelectProfile: (String) -> Unit,
     onSaveProfile: (AutomationProfile) -> Unit,
-    onBeginLivePick: (ScreenPickMode) -> Unit,
+    onBeginLivePick: (ScreenPickMode, AutomationProfile?, String?) -> Unit,
     onConsumeLivePick: (Long) -> Unit,
     onFreezeFrame: () -> Unit,
     onClearFrozenFrame: () -> Unit,
@@ -86,42 +83,69 @@ fun OverlayWorkspaceScreen(
     onDismissError: () -> Unit,
 ) {
     var tab by remember { mutableStateOf(WorkspaceTab.LIVE) }
-    var draft by remember(state.selectedProfile?.id) {
-        mutableStateOf(state.selectedProfile)
-    }
+    var draft by remember(state.selectedProfile?.id) { mutableStateOf(state.selectedProfile) }
+
     var editingRegion by remember { mutableStateOf<RecognitionRegion?>(null) }
-    var regionDialogOpen by remember { mutableStateOf(false) }
+    var regionEditorOpen by remember { mutableStateOf(false) }
     var editingAction by remember { mutableStateOf<ActionTarget?>(null) }
-    var actionDialogOpen by remember { mutableStateOf(false) }
+    var actionEditorOpen by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<DecisionRule?>(null) }
-    var ruleDialogOpen by remember { mutableStateOf(false) }
+    var ruleEditorOpen by remember { mutableStateOf(false) }
+    var redrawRegionId by remember { mutableStateOf<String?>(null) }
+    var redrawActionId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(screenPickerState.resultSequence, screenPickerState.result) {
         val result = screenPickerState.result ?: return@LaunchedEffect
+        val current = draft
         when (result) {
             is ScreenPickResult.Point -> {
-                editingAction = ProfileDraftFactory.tapTarget(result.point)
-                actionDialogOpen = true
-                tab = WorkspaceTab.PROFILE
+                val redrawId = redrawActionId
+                val existing = current?.actions?.firstOrNull { it.id == redrawId }
+                if (current != null && redrawId != null && existing != null) {
+                    draft = current.copy(
+                        actions = current.actions.upsertBy(existing.copy(start = result.point, end = null)) { it.id },
+                    )
+                } else {
+                    editingAction = ProfileDraftFactory.tapTarget(result.point)
+                    actionEditorOpen = true
+                }
+                redrawActionId = null
             }
             is ScreenPickResult.Swipe -> {
-                editingAction = ProfileDraftFactory.swipeTarget(result.start, result.end)
-                actionDialogOpen = true
-                tab = WorkspaceTab.PROFILE
+                val redrawId = redrawActionId
+                val existing = current?.actions?.firstOrNull { it.id == redrawId }
+                if (current != null && redrawId != null && existing != null) {
+                    draft = current.copy(
+                        actions = current.actions.upsertBy(existing.copy(start = result.start, end = result.end)) { it.id },
+                    )
+                } else {
+                    editingAction = ProfileDraftFactory.swipeTarget(result.start, result.end)
+                    actionEditorOpen = true
+                }
+                redrawActionId = null
             }
             is ScreenPickResult.Region -> {
-                editingRegion = ProfileDraftFactory.textRegion(result.bounds)
-                regionDialogOpen = true
-                tab = WorkspaceTab.PROFILE
+                val redrawId = redrawRegionId
+                val existing = current?.regions?.firstOrNull { it.id == redrawId }
+                if (current != null && redrawId != null && existing != null) {
+                    draft = current.copy(
+                        regions = current.regions.upsertBy(existing.copy(bounds = result.bounds)) { it.id },
+                    )
+                } else {
+                    editingRegion = ProfileDraftFactory.textRegion(result.bounds)
+                    regionEditorOpen = true
+                }
+                redrawRegionId = null
             }
         }
+        tab = WorkspaceTab.PROFILE
         onConsumeLivePick(screenPickerState.resultSequence)
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.30f)),
+            .background(Color.Black.copy(alpha = 0.34f)),
         contentAlignment = Alignment.CenterEnd,
     ) {
         Surface(
@@ -143,6 +167,10 @@ fun OverlayWorkspaceScreen(
                 WorkspaceTabs(tab = tab, onTabChange = { tab = it })
                 HorizontalDivider()
 
+                state.errorMessage?.let { message ->
+                    InlineError(message = message, onDismiss = onDismissError)
+                }
+
                 if (state.isLoading) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Loading workspace…")
@@ -163,81 +191,112 @@ fun OverlayWorkspaceScreen(
                             profiles = state.profiles,
                             draft = draft,
                             installedApps = state.installedApps,
+                            editingRegion = editingRegion,
+                            regionEditorOpen = regionEditorOpen,
+                            editingAction = editingAction,
+                            actionEditorOpen = actionEditorOpen,
+                            editingRule = editingRule,
+                            ruleEditorOpen = ruleEditorOpen,
                             onSelectProfile = { id ->
                                 onSelectProfile(id)
                                 draft = state.profiles.firstOrNull { it.id == id }
+                                editingRegion = null
+                                regionEditorOpen = false
+                                editingAction = null
+                                actionEditorOpen = false
+                                editingRule = null
+                                ruleEditorOpen = false
                             },
                             onDraftChange = { draft = it },
                             onSave = { profile ->
                                 onSaveProfile(profile)
                                 draft = profile
                             },
-                            onPickRegion = { onBeginLivePick(ScreenPickMode.REGION) },
-                            onPickTap = { onBeginLivePick(ScreenPickMode.POINT) },
-                            onPickSwipe = { onBeginLivePick(ScreenPickMode.SWIPE) },
-                            onAddRegion = {
-                                editingRegion = null
-                                regionDialogOpen = true
+                            onPreview = {
+                                onBeginLivePick(ScreenPickMode.PREVIEW, draft, null)
+                            },
+                            onPickRegion = {
+                                redrawRegionId = null
+                                redrawActionId = null
+                                onBeginLivePick(ScreenPickMode.REGION, draft, null)
+                            },
+                            onPickTap = {
+                                redrawRegionId = null
+                                redrawActionId = null
+                                onBeginLivePick(ScreenPickMode.POINT, draft, null)
+                            },
+                            onPickSwipe = {
+                                redrawRegionId = null
+                                redrawActionId = null
+                                onBeginLivePick(ScreenPickMode.SWIPE, draft, null)
                             },
                             onEditRegion = {
                                 editingRegion = it
-                                regionDialogOpen = true
+                                regionEditorOpen = true
+                                actionEditorOpen = false
+                                ruleEditorOpen = false
                             },
-                            onAddAction = {
-                                editingAction = null
-                                actionDialogOpen = true
+                            onRedrawRegion = { region ->
+                                redrawActionId = null
+                                redrawRegionId = region.id
+                                onBeginLivePick(ScreenPickMode.REGION, draft, region.id)
+                            },
+                            onCloseRegionEditor = { regionEditorOpen = false },
+                            onApplyRegion = { region ->
+                                val current = draft ?: return@ProfileWorkspaceTab
+                                draft = current.copy(regions = current.regions.upsertBy(region) { it.id })
+                                regionEditorOpen = false
                             },
                             onEditAction = {
                                 editingAction = it
-                                actionDialogOpen = true
+                                actionEditorOpen = true
+                                regionEditorOpen = false
+                                ruleEditorOpen = false
+                            },
+                            onRedrawAction = { action ->
+                                redrawRegionId = null
+                                redrawActionId = action.id
+                                onBeginLivePick(
+                                    if (action.kind == ActionKind.TAP) ScreenPickMode.POINT else ScreenPickMode.SWIPE,
+                                    draft,
+                                    action.id,
+                                )
+                            },
+                            onCloseActionEditor = { actionEditorOpen = false },
+                            onApplyAction = { action ->
+                                val current = draft ?: return@ProfileWorkspaceTab
+                                draft = current.copy(actions = current.actions.upsertBy(action) { it.id })
+                                actionEditorOpen = false
                             },
                             onAddRule = {
                                 editingRule = null
-                                ruleDialogOpen = true
+                                ruleEditorOpen = true
+                                regionEditorOpen = false
+                                actionEditorOpen = false
                             },
                             onEditRule = {
                                 editingRule = it
-                                ruleDialogOpen = true
+                                ruleEditorOpen = true
+                                regionEditorOpen = false
+                                actionEditorOpen = false
+                            },
+                            onCloseRuleEditor = { ruleEditorOpen = false },
+                            onApplyRule = { rule ->
+                                val current = draft ?: return@ProfileWorkspaceTab
+                                draft = current.copy(
+                                    logic = current.logic.copy(rules = current.logic.rules.upsertBy(rule) { it.id }),
+                                )
+                                ruleEditorOpen = false
                             },
                         )
-                        WorkspaceTab.LOGS -> LogsWorkspaceTab(liveLogs)
+                        WorkspaceTab.LOGS -> LiveLogViewer(
+                            logs = liveLogs,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp),
+                        )
                     }
                 }
-            }
-        }
-    }
-
-    state.errorMessage?.let { error ->
-        AlertDialog(
-            onDismissRequest = onDismissError,
-            title = { Text("TapScript") },
-            text = { Text(error) },
-            confirmButton = { TextButton(onClick = onDismissError) { Text("OK") } },
-        )
-    }
-
-    if (regionDialogOpen) {
-        TextRegionDialog(editingRegion, { regionDialogOpen = false }) { region ->
-            val current = draft ?: return@TextRegionDialog
-            draft = current.copy(regions = current.regions.upsertBy(region) { it.id })
-            regionDialogOpen = false
-        }
-    }
-    if (actionDialogOpen) {
-        ActionTargetDialog(editingAction, { actionDialogOpen = false }) { action ->
-            val current = draft ?: return@ActionTargetDialog
-            draft = current.copy(actions = current.actions.upsertBy(action) { it.id })
-            actionDialogOpen = false
-        }
-    }
-    if (ruleDialogOpen) {
-        val current = draft
-        if (current != null) {
-            DecisionRuleDialog(editingRule, current.actions, { ruleDialogOpen = false }) { rule ->
-                draft = current.copy(
-                    logic = current.logic.copy(rules = current.logic.rules.upsertBy(rule) { it.id }),
-                )
-                ruleDialogOpen = false
             }
         }
     }
@@ -252,20 +311,20 @@ private fun WorkspaceHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text("TapScript Workspace", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("TapScript", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
-                selectedProfileName ?: runtimeStatus.profileName.ifBlank { "No profile selected" },
+                selectedProfileName ?: runtimeStatus.profileName.ifBlank { "Workspace" },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         StatusPill(runtimeStatus.phase)
-        TextButton(onClick = onClose) { Text("Close") }
+        TextButton(onClick = onClose) { Text("×") }
     }
 }
 
@@ -273,7 +332,7 @@ private fun WorkspaceHeader(
 private fun StatusPill(phase: SessionPhase) {
     val label = phase.name.lowercase().replaceFirstChar { it.titlecase() }
     Surface(shape = RoundedCornerShape(999.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-        Text(label, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp), style = MaterialTheme.typography.labelMedium)
+        Text(label, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -283,8 +342,8 @@ private fun WorkspaceTabs(tab: WorkspaceTab, onTabChange: (WorkspaceTab) -> Unit
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         WorkspaceTab.entries.forEach { item ->
             FilterChip(
@@ -292,6 +351,27 @@ private fun WorkspaceTabs(tab: WorkspaceTab, onTabChange: (WorkspaceTab) -> Unit
                 onClick = { onTabChange(item) },
                 label = { Text(item.label) },
             )
+        }
+    }
+}
+
+@Composable
+private fun InlineError(message: String, onDismiss: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(message, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = onDismiss) { Text("×") }
         }
     }
 }
@@ -311,24 +391,19 @@ private fun LiveWorkspaceTab(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         RuntimeSummaryCard(runtimeStatus, onResumeToApp, onStopSession)
-
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onFreezeFrame, enabled = !isFreezingFrame, modifier = Modifier.weight(1f)) {
-                Text(if (isFreezingFrame) "Freezing…" else "Freeze current frame")
+                Text(if (isFreezingFrame) "Freezing…" else "Freeze frame")
             }
             if (frozenFrame != null) {
                 OutlinedButton(onClick = onClearFrozenFrame) { Text("Clear") }
             }
         }
-
-        frozenFrame?.let { bitmap ->
-            FrozenFramePreview(bitmap, profile?.regions.orEmpty())
-        }
-
+        frozenFrame?.let { FrozenFramePreview(it, profile?.regions.orEmpty()) }
         LiveVariablesCard(runtimeStatus)
         OcrPreviewCard(runtimeStatus)
     }
@@ -341,23 +416,20 @@ private fun RuntimeSummaryCard(
     onStopSession: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text(status.profileName.ifBlank { "Runtime" }, style = MaterialTheme.typography.titleMedium)
             Text(status.message.ifBlank { "Ready" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            val metrics = status.metrics
             Text(
-                "frame ${metrics.frameAgeMs} ms • OCR ${metrics.recognitionMs} ms • decision ${metrics.decisionMs} ms",
+                "frame ${status.metrics.frameAgeMs} ms • OCR ${status.metrics.recognitionMs} ms • decision ${status.metrics.decisionMs} ms",
                 style = MaterialTheme.typography.bodySmall,
             )
-            if (metrics.lastCommand.isNotBlank()) {
-                Text("Last: ${metrics.lastCommand}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+            if (status.metrics.lastCommand.isNotBlank()) {
+                Text("Last: ${status.metrics.lastCommand}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
             }
             val active = status.phase !in setOf(SessionPhase.IDLE, SessionPhase.STOPPED, SessionPhase.ERROR)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onResumeToApp, enabled = active) {
-                    Text("Resume & close")
-                }
-                Button(onClick = onStopSession, enabled = active) { Text("Stop") }
+                OutlinedButton(onClick = onResumeToApp, enabled = active) { Text("▶") }
+                Button(onClick = onStopSession, enabled = active) { Text("■") }
             }
         }
     }
@@ -368,16 +440,16 @@ private fun LiveVariablesCard(status: AutomationSessionStatus) {
     val values = status.snapshot?.values.orEmpty().toSortedMap()
     EditorSection("Live variables") {
         if (values.isEmpty()) {
-            Hint("No extracted variables yet. They appear here after the next recognized frame.")
+            Hint("No extracted variables yet.")
         } else {
             values.forEach { (name, value) ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
                 ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
+                    Column(modifier = Modifier.padding(9.dp)) {
                         Text(name, style = MaterialTheme.typography.labelMedium, fontFamily = FontFamily.Monospace)
-                        Text(formatRuntimeValue(value), style = MaterialTheme.typography.bodyMedium)
+                        Text(formatRuntimeValue(value), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -388,30 +460,22 @@ private fun LiveVariablesCard(status: AutomationSessionStatus) {
 @Composable
 private fun OcrPreviewCard(status: AutomationSessionStatus) {
     val observations = status.snapshot?.observations.orEmpty()
-    EditorSection("OCR preview") {
+    EditorSection("OCR") {
         if (observations.isEmpty()) {
             Hint("No region observations yet.")
         } else {
             observations.forEach { observation ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            "${observation.regionId} • ${observation.recognitionMs} ms",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        val error = observation.errorMessage
-                        if (error != null) {
-                            Text(error, color = MaterialTheme.colorScheme.error)
-                        } else {
-                            Text(
-                                observation.rawText.ifBlank { "(empty OCR result)" },
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                            )
-                        }
-                    }
-                }
+                Text(
+                    "${observation.regionId} • ${observation.recognitionMs} ms",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    observation.errorMessage ?: observation.rawText.ifBlank { "(empty)" },
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = if (observation.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                )
             }
         }
     }
@@ -420,7 +484,6 @@ private fun OcrPreviewCard(status: AutomationSessionStatus) {
 @Composable
 private fun FrozenFramePreview(bitmap: Bitmap, regions: List<RecognitionRegion>) {
     EditorSection("Frozen frame") {
-        Hint("The workspace hides itself for one capture frame. Configured OCR regions are outlined below.")
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -443,7 +506,7 @@ private fun FrozenFramePreview(bitmap: Bitmap, regions: List<RecognitionRegion>)
                     val topLeft = transform.toCanvas(NormalizedPoint(region.bounds.left, region.bounds.top))
                     val bottomRight = transform.toCanvas(NormalizedPoint(region.bounds.right, region.bounds.bottom))
                     drawRect(
-                        color = Color(0xFF7AA2FF),
+                        color = Color(0xFF55DCB4),
                         topLeft = topLeft,
                         size = Size(
                             width = (bottomRight.x - topLeft.x).coerceAtLeast(1f),
@@ -457,27 +520,41 @@ private fun FrozenFramePreview(bitmap: Bitmap, regions: List<RecognitionRegion>)
     }
 }
 
+@Suppress("LongParameterList")
 @Composable
 private fun ProfileWorkspaceTab(
     profiles: List<AutomationProfile>,
     draft: AutomationProfile?,
     installedApps: List<dev.tapscript.platform.android.app.LaunchableAppInfo>,
+    editingRegion: RecognitionRegion?,
+    regionEditorOpen: Boolean,
+    editingAction: ActionTarget?,
+    actionEditorOpen: Boolean,
+    editingRule: DecisionRule?,
+    ruleEditorOpen: Boolean,
     onSelectProfile: (String) -> Unit,
     onDraftChange: (AutomationProfile) -> Unit,
     onSave: (AutomationProfile) -> Unit,
+    onPreview: () -> Unit,
     onPickRegion: () -> Unit,
     onPickTap: () -> Unit,
     onPickSwipe: () -> Unit,
-    onAddRegion: () -> Unit,
     onEditRegion: (RecognitionRegion) -> Unit,
-    onAddAction: () -> Unit,
+    onRedrawRegion: (RecognitionRegion) -> Unit,
+    onCloseRegionEditor: () -> Unit,
+    onApplyRegion: (RecognitionRegion) -> Unit,
     onEditAction: (ActionTarget) -> Unit,
+    onRedrawAction: (ActionTarget) -> Unit,
+    onCloseActionEditor: () -> Unit,
+    onApplyAction: (ActionTarget) -> Unit,
     onAddRule: () -> Unit,
     onEditRule: (DecisionRule) -> Unit,
+    onCloseRuleEditor: () -> Unit,
+    onApplyRule: (DecisionRule) -> Unit,
 ) {
     if (draft == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No profiles available. Create one in the main TapScript app first.")
+            Text("No profiles available. Create or import one in TapScript first.")
         }
         return
     }
@@ -486,38 +563,50 @@ private fun ProfileWorkspaceTab(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ProfileSelector(profiles, draft.id, onSelectProfile)
-        ProfileIdentitySection(draft, installedApps, onDraftChange)
+        InlineProfileSelector(profiles, draft.id, onSelectProfile)
+        OverlayProfileIdentitySection(draft, installedApps, onDraftChange)
         ProfileRuntimeSection(draft, onDraftChange)
 
-        EditorSection("Live visual authoring") {
-            Hint("TapScript stays over the target app. Pick coordinates directly on the live screen; no manual X/Y entry is needed.")
-            Button(onClick = onPickRegion, modifier = Modifier.fillMaxWidth()) { Text("Pick OCR region on screen") }
+        EditorSection("Visual layout") {
+            Hint("The workspace hides while you draw on the real target screen. Existing geometry stays visible on the dimmed overlay.")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onPickTap, modifier = Modifier.weight(1f)) { Text("Pick tap") }
-                OutlinedButton(onClick = onPickSwipe, modifier = Modifier.weight(1f)) { Text("Pick swipe") }
+                OutlinedButton(onClick = onPreview, modifier = Modifier.weight(1f)) { Text("Preview") }
+                OutlinedButton(onClick = onPickRegion, modifier = Modifier.weight(1f)) { Text("OCR") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onPickTap, modifier = Modifier.weight(1f)) { Text("Tap") }
+                OutlinedButton(onClick = onPickSwipe, modifier = Modifier.weight(1f)) { Text("Swipe") }
             }
         }
 
+        if (regionEditorOpen && editingRegion != null) {
+            OverlayRegionEditor(editingRegion, onApplyRegion, onCloseRegionEditor)
+        }
         ProfileRegionsSection(
             regions = draft.regions,
-            onAdd = onAddRegion,
+            onAdd = onPickRegion,
             onEdit = onEditRegion,
-            onDelete = { region ->
-                onDraftChange(draft.copy(regions = draft.regions.filterNot { it.id == region.id }))
-            },
+            onDelete = { region -> onDraftChange(draft.copy(regions = draft.regions.filterNot { it.id == region.id })) },
+            onRedraw = onRedrawRegion,
         )
+
+        if (actionEditorOpen && editingAction != null) {
+            OverlayActionEditor(editingAction, onApplyAction, onCloseActionEditor)
+        }
         ProfileActionsSection(
             actions = draft.actions,
-            onAdd = onAddAction,
+            onAdd = onPickTap,
             onEdit = onEditAction,
-            onDelete = { action ->
-                onDraftChange(draft.copy(actions = draft.actions.filterNot { it.id == action.id }))
-            },
+            onDelete = { action -> onDraftChange(draft.copy(actions = draft.actions.filterNot { it.id == action.id })) },
+            onRedraw = onRedrawAction,
         )
+
+        if (ruleEditorOpen) {
+            OverlayRuleEditor(editingRule, draft.actions, onApplyRule, onCloseRuleEditor)
+        }
         ProfileLogicSection(
             logic = draft.logic,
             onLogicChange = { onDraftChange(draft.copy(logic = it)) },
@@ -527,6 +616,7 @@ private fun ProfileWorkspaceTab(
                 onDraftChange(draft.copy(logic = draft.logic.copy(rules = draft.logic.rules.filterNot { it.id == rule.id })))
             },
         )
+
         HorizontalDivider()
         Button(onClick = { onSave(draft) }, modifier = Modifier.fillMaxWidth(), enabled = draft.name.isNotBlank()) {
             Text("Save profile")
@@ -536,61 +626,23 @@ private fun ProfileWorkspaceTab(
 }
 
 @Composable
-private fun ProfileSelector(
+private fun InlineProfileSelector(
     profiles: List<AutomationProfile>,
     selectedId: String,
     onSelected: (String) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val selected = profiles.firstOrNull { it.id == selectedId }
-    Box {
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(selected?.name ?: "Choose profile")
-                Text(selected?.id.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            profiles.forEach { profile ->
-                DropdownMenuItem(
-                    text = { Text(profile.name) },
-                    onClick = {
-                        expanded = false
-                        onSelected(profile.id)
-                    },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun LogsWorkspaceTab(logs: List<AutomationLogEntry>) {
-    if (logs.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No live logs for the current run.")
-        }
-        return
-    }
-
-    val formatter = remember { SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()) }
-    LazyColumn(
+    Row(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(7.dp),
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(logs.takeLast(500)) { entry ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(
-                        "${formatter.format(Date(entry.timestampEpochMs))}  ${entry.level.name}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(entry.message, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                }
-            }
+        profiles.forEach { profile ->
+            FilterChip(
+                selected = profile.id == selectedId,
+                onClick = { onSelected(profile.id) },
+                label = { Text(profile.name) },
+            )
         }
     }
 }

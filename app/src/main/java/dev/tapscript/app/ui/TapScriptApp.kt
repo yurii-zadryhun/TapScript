@@ -21,6 +21,7 @@ fun TapScriptApp(
     if (editorProfile != null || creatingProfile) {
         ProfileEditorScreen(
             initialProfile = editorProfile ?: AutomationProfile(name = "New profile"),
+            installedApps = state.installedApps,
             onCancel = {
                 editorProfile = null
                 creatingProfile = false
@@ -43,6 +44,8 @@ fun TapScriptApp(
             onStartProfile = viewModel::start,
             onStopSession = viewModel::stop,
             onLaunchTarget = viewModel::launchTarget,
+            onDeleteRun = viewModel::deleteRun,
+            onClearHistory = viewModel::clearHistory,
             onDismissError = viewModel::clearError,
         )
     }

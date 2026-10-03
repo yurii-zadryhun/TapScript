@@ -1,11 +1,16 @@
 package dev.tapscript.app
 
 import android.content.Context
+import dev.tapscript.app.diagnostics.CrashReportStore
 import dev.tapscript.app.logging.CompositeAutomationLogger
 import dev.tapscript.app.logging.SessionHistoryRecorder
 import dev.tapscript.app.overlay.FloatingOverlayController
 import dev.tapscript.app.overlay.OverlayWorkspaceController
 import dev.tapscript.app.overlay.ScreenPickerController
+import dev.tapscript.engine.api.model.AutomationLogEntry
+import dev.tapscript.engine.api.model.AutomationLogLevel
+import dev.tapscript.engine.api.model.AutomationRunRecord
+import dev.tapscript.engine.api.model.RunOutcome
 import dev.tapscript.engine.core.action.ActionResolver
 import dev.tapscript.engine.core.action.CommandExecutor
 import dev.tapscript.engine.core.decision.DefaultDecisionEngine
@@ -34,7 +39,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-class AppGraph(context: Context) {
+class AppGraph(
+    context: Context,
+    private val crashReportStore: CrashReportStore,
+) {
     private val applicationContext = context.applicationContext
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -115,6 +123,7 @@ class AppGraph(context: Context) {
 
     fun seedDefaults() {
         applicationScope.launch {
+            recoverLastCrash()
             if (profileRepository.list().isEmpty()) {
                 profileRepository.save(SampleProfiles.lootEvaluator())
             }
@@ -127,5 +136,43 @@ class AppGraph(context: Context) {
         sessionManager.stop()
         captureController.stop()
         overlayController.closeOverlay()
+    }
+
+    private suspend fun recoverLastCrash() {
+        val crash = crashReportStore.read() ?: return
+        val errorEntry = AutomationLogEntry(
+            timestampEpochMs = crash.timestampEpochMs,
+            level = AutomationLogLevel.ERROR,
+            message = buildString {
+                append("TapScript crashed")
+                if (crash.threadName.isNotBlank()) append(" on ${crash.threadName}")
+                if (crash.stackTrace.isNotBlank()) append("\n${crash.stackTrace}")
+            },
+        )
+
+        val interrupted = sessionHistoryRepository.list(50)
+            .firstOrNull { it.outcome == RunOutcome.RUNNING }
+        val recovered = if (interrupted != null) {
+            interrupted.copy(
+                endedAtEpochMs = crash.timestampEpochMs,
+                outcome = RunOutcome.ERROR,
+                logs = (interrupted.logs + errorEntry).takeLast(MAX_RECOVERED_LOGS),
+            )
+        } else {
+            AutomationRunRecord(
+                profileId = "",
+                profileName = "TapScript crash",
+                startedAtEpochMs = crash.timestampEpochMs,
+                endedAtEpochMs = crash.timestampEpochMs,
+                outcome = RunOutcome.ERROR,
+                logs = listOf(errorEntry),
+            )
+        }
+        sessionHistoryRepository.save(recovered)
+        crashReportStore.clear()
+    }
+
+    private companion object {
+        const val MAX_RECOVERED_LOGS = 5_000
     }
 }

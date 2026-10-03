@@ -46,6 +46,10 @@ fun ProfileEditorScreen(
     var actionDialogOpen by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<DecisionRule?>(null) }
     var ruleDialogOpen by remember { mutableStateOf(false) }
+    var redrawRegionId by remember { mutableStateOf<String?>(null) }
+    var redrawActionId by remember { mutableStateOf<String?>(null) }
+
+    val livePickerAvailable = overlayPermissionGranted && profile.targetPackage.isNotBlank()
 
     DisposableEffect(initialProfile.id) {
         onDispose {
@@ -57,16 +61,49 @@ fun ProfileEditorScreen(
         val result = screenPickerState.result ?: return@LaunchedEffect
         when (result) {
             is ScreenPickResult.Point -> {
-                editingAction = ProfileDraftFactory.tapTarget(result.point)
-                actionDialogOpen = true
+                val existingId = redrawActionId
+                if (existingId != null) {
+                    val existing = profile.actions.firstOrNull { it.id == existingId }
+                    if (existing != null) {
+                        profile = profile.copy(
+                            actions = profile.actions.upsertBy(existing.copy(start = result.point, end = null)) { it.id },
+                        )
+                    }
+                    redrawActionId = null
+                } else {
+                    editingAction = ProfileDraftFactory.tapTarget(result.point)
+                    actionDialogOpen = true
+                }
             }
             is ScreenPickResult.Swipe -> {
-                editingAction = ProfileDraftFactory.swipeTarget(result.start, result.end)
-                actionDialogOpen = true
+                val existingId = redrawActionId
+                if (existingId != null) {
+                    val existing = profile.actions.firstOrNull { it.id == existingId }
+                    if (existing != null) {
+                        profile = profile.copy(
+                            actions = profile.actions.upsertBy(existing.copy(start = result.start, end = result.end)) { it.id },
+                        )
+                    }
+                    redrawActionId = null
+                } else {
+                    editingAction = ProfileDraftFactory.swipeTarget(result.start, result.end)
+                    actionDialogOpen = true
+                }
             }
             is ScreenPickResult.Region -> {
-                editingRegion = ProfileDraftFactory.textRegion(result.bounds)
-                regionDialogOpen = true
+                val existingId = redrawRegionId
+                if (existingId != null) {
+                    val existing = profile.regions.firstOrNull { it.id == existingId }
+                    if (existing != null) {
+                        profile = profile.copy(
+                            regions = profile.regions.upsertBy(existing.copy(bounds = result.bounds)) { it.id },
+                        )
+                    }
+                    redrawRegionId = null
+                } else {
+                    editingRegion = ProfileDraftFactory.textRegion(result.bounds)
+                    regionDialogOpen = true
+                }
             }
         }
         onConsumeLivePick(screenPickerState.resultSequence)
@@ -87,10 +124,22 @@ fun ProfileEditorScreen(
             ProfileRuntimeSection(profile) { profile = it }
             AuthoringReferenceSection(
                 bitmap = referenceBitmap,
-                livePickerAvailable = overlayPermissionGranted && profile.targetPackage.isNotBlank(),
-                onPickLiveRegion = { onBeginLivePick(profile, ScreenPickMode.REGION) },
-                onPickLiveTap = { onBeginLivePick(profile, ScreenPickMode.POINT) },
-                onPickLiveSwipe = { onBeginLivePick(profile, ScreenPickMode.SWIPE) },
+                livePickerAvailable = livePickerAvailable,
+                onPickLiveRegion = {
+                    redrawRegionId = null
+                    redrawActionId = null
+                    onBeginLivePick(profile, ScreenPickMode.REGION)
+                },
+                onPickLiveTap = {
+                    redrawRegionId = null
+                    redrawActionId = null
+                    onBeginLivePick(profile, ScreenPickMode.POINT)
+                },
+                onPickLiveSwipe = {
+                    redrawRegionId = null
+                    redrawActionId = null
+                    onBeginLivePick(profile, ScreenPickMode.SWIPE)
+                },
                 onImportScreenshot = { screenshotPicker.launch("image/*") },
                 onDrawRegion = { visualPickMode = VisualPickMode.REGION },
                 onPlaceTap = { visualPickMode = VisualPickMode.POINT },
@@ -109,6 +158,11 @@ fun ProfileEditorScreen(
                 onDelete = { region ->
                     profile = profile.copy(regions = profile.regions.filterNot { it.id == region.id })
                 },
+                onRedraw = if (livePickerAvailable) { region ->
+                    redrawActionId = null
+                    redrawRegionId = region.id
+                    onBeginLivePick(profile, ScreenPickMode.REGION)
+                } else null,
             )
             ProfileActionsSection(
                 actions = profile.actions,
@@ -123,6 +177,14 @@ fun ProfileEditorScreen(
                 onDelete = { action ->
                     profile = profile.copy(actions = profile.actions.filterNot { it.id == action.id })
                 },
+                onRedraw = if (livePickerAvailable) { action ->
+                    redrawRegionId = null
+                    redrawActionId = action.id
+                    onBeginLivePick(
+                        profile,
+                        if (action.kind == ActionKind.TAP) ScreenPickMode.POINT else ScreenPickMode.SWIPE,
+                    )
+                } else null,
             )
             ProfileLogicSection(
                 logic = profile.logic,

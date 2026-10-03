@@ -125,6 +125,11 @@ fun ProfileEditorScreen(
             AuthoringReferenceSection(
                 bitmap = referenceBitmap,
                 livePickerAvailable = livePickerAvailable,
+                onPreviewLive = {
+                    redrawRegionId = null
+                    redrawActionId = null
+                    onBeginLivePick(profile, ScreenPickMode.PREVIEW)
+                },
                 onPickLiveRegion = {
                     redrawRegionId = null
                     redrawActionId = null

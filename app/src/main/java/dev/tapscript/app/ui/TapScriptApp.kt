@@ -16,6 +16,7 @@ fun TapScriptApp(
     onRequestOverlayPermission: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val screenPickerState by viewModel.screenPickerState.collectAsStateWithLifecycle()
     var editorProfile by remember { mutableStateOf<AutomationProfile?>(null) }
     var creatingProfile by remember { mutableStateOf(false) }
 
@@ -23,6 +24,9 @@ fun TapScriptApp(
         ProfileEditorScreen(
             initialProfile = editorProfile ?: AutomationProfile(name = "New profile"),
             installedApps = state.installedApps,
+            screenPickerState = screenPickerState,
+            onBeginLivePick = viewModel::beginScreenPick,
+            onConsumeLivePick = viewModel::consumeScreenPick,
             onCancel = {
                 editorProfile = null
                 creatingProfile = false

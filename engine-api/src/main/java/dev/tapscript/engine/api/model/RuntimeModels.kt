@@ -52,6 +52,7 @@ data class AutomationSessionStatus(
 enum class SessionPhase {
     IDLE,
     WAITING_FOR_FRAME,
+    PAUSED,
     RUNNING,
     ERROR,
     STOPPED,

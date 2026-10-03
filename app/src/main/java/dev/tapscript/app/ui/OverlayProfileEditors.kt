@@ -3,6 +3,7 @@ package dev.tapscript.app.ui
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
@@ -460,7 +461,7 @@ internal fun OverlayRuleEditor(
 private fun InlineEditorSection(
     title: String,
     onCancel: () -> Unit,
-    content: @Composable Column.() -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     EditorSection(title) {
         content()

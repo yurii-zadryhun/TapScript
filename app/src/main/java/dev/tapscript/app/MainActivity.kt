@@ -36,6 +36,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (handleCloseIntent(intent)) return
+
         enableEdgeToEdge()
         dashboardViewModel = ViewModelProvider(
             this,
@@ -54,9 +56,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleCloseIntent(intent)
+    }
+
     override fun onResume() {
         super.onResume()
         if (::dashboardViewModel.isInitialized) dashboardViewModel.refresh()
+    }
+
+    private fun handleCloseIntent(intent: Intent?): Boolean {
+        if (intent?.action != ACTION_CLOSE) return false
+        graph.overlayController.closeOverlay()
+        finishAndRemoveTask()
+        return true
     }
 
     private fun requestScreenCapture() {
@@ -74,5 +89,9 @@ class MainActivity : ComponentActivity() {
                 Uri.parse("package:$packageName"),
             ),
         )
+    }
+
+    companion object {
+        const val ACTION_CLOSE = "dev.tapscript.app.action.CLOSE"
     }
 }

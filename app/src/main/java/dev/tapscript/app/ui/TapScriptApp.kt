@@ -15,6 +15,8 @@ fun TapScriptApp(
     onRequestCapture: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onRequestOverlayPermission: () -> Unit,
+    onImportProfiles: () -> Unit,
+    onExportProfiles: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val screenPickerState by viewModel.screenPickerState.collectAsStateWithLifecycle()
@@ -53,6 +55,8 @@ fun TapScriptApp(
             onOpenAccessibilitySettings = onOpenAccessibilitySettings,
             onRequestOverlayPermission = onRequestOverlayPermission,
             onCreateProfile = { creatingProfile = true },
+            onImportProfiles = onImportProfiles,
+            onExportProfiles = onExportProfiles,
             onEditProfile = { editorProfile = it },
             onDeleteProfile = viewModel::deleteProfile,
             onStartProfile = viewModel::start,
@@ -61,6 +65,7 @@ fun TapScriptApp(
             onDeleteRun = viewModel::deleteRun,
             onClearHistory = viewModel::clearHistory,
             onDismissError = viewModel::clearError,
+            onDismissInfo = viewModel::clearInfo,
         )
     }
 }

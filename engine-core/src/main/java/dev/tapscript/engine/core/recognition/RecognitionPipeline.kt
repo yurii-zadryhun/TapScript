@@ -1,6 +1,7 @@
 package dev.tapscript.engine.core.recognition
 
 import dev.tapscript.engine.api.model.AutomationProfile
+import dev.tapscript.engine.api.model.RecognitionRegion
 import dev.tapscript.engine.api.model.RecognizerKind
 import dev.tapscript.engine.api.model.RegionObservation
 import dev.tapscript.engine.api.model.ScreenFrame
@@ -11,15 +12,21 @@ class RecognitionPipeline(
     private val cropper: BitmapRegionCropper,
     private val extractor: RegexValueExtractor,
 ) {
-    suspend fun observe(profile: AutomationProfile, frame: ScreenFrame): List<RegionObservation> =
-        profile.regions
-            .asSequence()
-            .filter { it.enabled }
-            .map { region -> observeRegion(region, frame) }
-            .toList()
+    suspend fun observe(
+        profile: AutomationProfile,
+        frame: ScreenFrame,
+    ): List<RegionObservation> {
+        val observations = mutableListOf<RegionObservation>()
+        for (region in profile.regions) {
+            if (region.enabled) {
+                observations += observeRegion(region, frame)
+            }
+        }
+        return observations
+    }
 
     private suspend fun observeRegion(
-        region: dev.tapscript.engine.api.model.RecognitionRegion,
+        region: RecognitionRegion,
         frame: ScreenFrame,
     ): RegionObservation {
         require(region.recognizer == RecognizerKind.TEXT) {
@@ -27,7 +34,7 @@ class RecognitionPipeline(
         }
 
         val startedAt = System.nanoTime()
-        return runCatching {
+        return try {
             val cropped = cropper.crop(frame.bitmap, region.bounds)
             val rawText = try {
                 textRecognizer.recognize(cropped).text
@@ -48,7 +55,7 @@ class RecognitionPipeline(
                 variables = variables,
                 recognitionMs = elapsedMs(startedAt),
             )
-        }.getOrElse { throwable ->
+        } catch (throwable: Throwable) {
             RegionObservation(
                 regionId = region.id,
                 rawText = "",

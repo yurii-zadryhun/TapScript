@@ -63,12 +63,11 @@ class AutomationSessionManager(
         pauseController.resume(AutomationPauseController.MANUAL_TOKEN)
     }
 
+    fun isManuallyPaused(): Boolean =
+        pauseController.isPaused(AutomationPauseController.MANUAL_TOKEN)
+
     fun togglePause() {
-        if (pauseController.isPaused()) {
-            resume()
-        } else {
-            pause()
-        }
+        if (isManuallyPaused()) resume() else pause()
     }
 
     fun stop() {

@@ -209,7 +209,7 @@ class OverlayWorkspaceController(
                     onConsumeLivePick = ::consumeScreenPick,
                     onFreezeFrame = ::freezeCurrentFrame,
                     onClearFrozenFrame = ::clearFrozenFrame,
-                    onTogglePause = ::close,
+                    onResumeToApp = ::close,
                     onStopSession = onStopSession,
                     onDismissError = ::clearError,
                 )

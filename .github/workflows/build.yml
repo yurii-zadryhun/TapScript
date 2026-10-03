@@ -1,0 +1,56 @@
+name: TapScript CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+
+      - name: Test, lint, and build
+        run: gradle test :app:lintDebug :app:assembleDebug :app:assembleRelease --stacktrace
+
+      - name: Collect build outputs
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/TapScript-v0.1.0-debug.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk dist/TapScript-v0.1.0-release-unsigned.apk
+          if [[ -f app/build/reports/lint-results-debug.html ]]; then
+            cp app/build/reports/lint-results-debug.html dist/lint-results-debug.html
+          fi
+
+      - name: Upload build outputs
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TapScript-v0.1.0-ci-build
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30

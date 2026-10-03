@@ -7,6 +7,7 @@ import dev.tapscript.engine.api.ports.AutomationLogger
 import dev.tapscript.engine.api.ports.ProfileRepository
 import dev.tapscript.engine.core.runtime.AutomationPauseController
 import dev.tapscript.engine.core.runtime.AutomationRunner
+import dev.tapscript.platform.android.capture.CaptureServiceController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -21,6 +22,7 @@ class AutomationSessionManager(
     private val pauseController: AutomationPauseController,
     private val logger: AutomationLogger,
     private val historyRecorder: SessionHistoryRecorder,
+    private val captureController: CaptureServiceController,
 ) {
     private var sessionJob: Job? = null
 
@@ -33,6 +35,7 @@ class AutomationSessionManager(
             val profile = profileRepository.get(profileId)
             if (profile == null) {
                 logger.error("Profile '$profileId' was not found")
+                captureController.stop()
                 return@launch
             }
 
@@ -49,6 +52,7 @@ class AutomationSessionManager(
                 withContext(NonCancellable) {
                     runCatching { historyRecorder.finish(outcome) }
                         .onFailure { logger.error("Could not persist session history", it) }
+                    captureController.stop()
                 }
             }
         }
@@ -57,10 +61,12 @@ class AutomationSessionManager(
     fun pause() {
         if (sessionJob?.isActive != true) return
         pauseController.pause(AutomationPauseController.MANUAL_TOKEN, "Paused by user")
+        runner.reflectPause("Paused by user")
     }
 
     fun resume() {
         pauseController.resume(AutomationPauseController.MANUAL_TOKEN)
+        runner.reflectResumeRequest()
     }
 
     fun isManuallyPaused(): Boolean =
@@ -71,9 +77,15 @@ class AutomationSessionManager(
     }
 
     fun stop() {
-        if (sessionJob?.isActive == true) logger.info("Stop requested")
+        scope.launch { stopAndJoin() }
+    }
+
+    suspend fun stopAndJoin() {
+        val job = sessionJob
+        if (job?.isActive == true) logger.info("Stop requested")
         pauseController.clear()
-        sessionJob?.cancel()
         sessionJob = null
+        job?.cancelAndJoin()
+        captureController.stop()
     }
 }

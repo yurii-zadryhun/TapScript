@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.tapscript.engine.api.model.AutomationProfile
@@ -51,17 +52,24 @@ internal fun ProfileIdentitySection(
                 onClick = { appPickerOpen = true },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(selected?.label ?: "Selected app")
-                    Text(
-                        profile.targetPackage,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    selected?.let { AppIcon(it) }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(selected?.label ?: "Selected app")
+                        Text(
+                            profile.targetPackage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             Text(
-                "The profile pauses while another app is in the foreground and resumes automatically when this app returns.",
+                "TapScript launches this app when the profile starts, pauses when it leaves the foreground, and resumes when it returns.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -127,13 +135,20 @@ private fun AppPickerDialog(
                                 onClick = { onSelected(app) },
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    Text(app.label)
-                                    Text(
-                                        app.packageName,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    AppIcon(app)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(app.label)
+                                        Text(
+                                            app.packageName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                 }
                             }
                         }

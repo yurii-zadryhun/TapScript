@@ -44,8 +44,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/TapScript-v0.1.0-debug.apk
-          cp app/build/outputs/apk/release/app-release-unsigned.apk dist/TapScript-v0.1.0-release-unsigned.apk
+          cp app/build/outputs/apk/debug/app-debug.apk dist/TapScript-debug.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk dist/TapScript-release-unsigned.apk
           if [[ -f app/build/reports/lint-results-debug.html ]]; then
             cp app/build/reports/lint-results-debug.html dist/lint-results-debug.html
           fi
@@ -54,7 +54,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: TapScript-v0.1.0-ci-build
+          name: TapScript-ci-build
           path: dist/
           if-no-files-found: error
           retention-days: 30

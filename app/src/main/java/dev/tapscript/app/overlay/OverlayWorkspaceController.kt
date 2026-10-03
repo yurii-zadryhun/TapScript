@@ -46,7 +46,6 @@ class OverlayWorkspaceController(
     private val pauseController: AutomationPauseController,
     private val sessionStatus: StateFlow<AutomationSessionStatus>,
     private val liveLogs: StateFlow<List<AutomationLogEntry>>,
-    private val onTogglePause: () -> Unit,
     private val onStopSession: () -> Unit,
 ) {
     private val applicationContext = context.applicationContext
@@ -210,7 +209,6 @@ class OverlayWorkspaceController(
                     onConsumeLivePick = ::consumeScreenPick,
                     onFreezeFrame = ::freezeCurrentFrame,
                     onClearFrozenFrame = ::clearFrozenFrame,
-                    onTogglePause = onTogglePause,
                     onStopSession = onStopSession,
                     onDismissError = ::clearError,
                 )

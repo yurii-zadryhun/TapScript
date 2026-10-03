@@ -1,49 +1,28 @@
-name: Bootstrap TapScript
+name: Build TapScript
 
 on:
   push:
     branches: [master]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  bootstrap-and-build:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore source tree
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p .bootstrap-extracted
-          cat bootstrap/part-* | base64 --decode | tar -xJ -C .bootstrap-extracted
-          cp -a .bootstrap-extracted/TapScript/. .
-          rm -rf bootstrap .bootstrap-extracted
-          rm -f .github/workflows/android.yml
-
-      - name: Commit restored source
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "feat: bootstrap TapScript source"
-          git push origin HEAD:master
-
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-37" "build-tools;36.0.0"
 
       - uses: gradle/actions/setup-gradle@v4
         with:

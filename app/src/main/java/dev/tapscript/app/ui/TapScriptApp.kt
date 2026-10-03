@@ -1,6 +1,7 @@
 package dev.tapscript.app.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,6 +20,14 @@ fun TapScriptApp(
     val screenPickerState by viewModel.screenPickerState.collectAsStateWithLifecycle()
     var editorProfile by remember { mutableStateOf<AutomationProfile?>(null) }
     var creatingProfile by remember { mutableStateOf(false) }
+
+    LaunchedEffect(viewModel) {
+        viewModel.effects.collect { effect ->
+            when (effect) {
+                DashboardEffect.RequestCapturePermission -> onRequestCapture()
+            }
+        }
+    }
 
     if (editorProfile != null || creatingProfile) {
         ProfileEditorScreen(
@@ -41,8 +50,6 @@ fun TapScriptApp(
     } else {
         DashboardScreen(
             state = state,
-            onRequestCapture = onRequestCapture,
-            onStopCapture = viewModel::stopCapture,
             onOpenAccessibilitySettings = onOpenAccessibilitySettings,
             onSetOverlayEnabled = viewModel::setOverlayEnabled,
             onRequestOverlayPermission = onRequestOverlayPermission,

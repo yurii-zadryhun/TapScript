@@ -1,12 +1,21 @@
 package dev.tapscript.app.ui
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import dev.tapscript.engine.api.model.*
+import dev.tapscript.engine.api.model.AutomationLogic
+import dev.tapscript.engine.api.model.ComparisonOperator
+import dev.tapscript.engine.api.model.DecisionRule
+import dev.tapscript.engine.api.model.LogicMode
 
 @Composable
 internal fun ProfileLogicSection(
@@ -55,7 +64,7 @@ private fun RuleList(
 @Composable
 private fun ScriptEditor(script: String, onChange: (String) -> Unit) {
     Text(
-        "API: vars, tap(id), swipe(id), waitMs(ms), log(text)",
+        "API: vars, tap/tapRandom, swipe/swipeRandom, waitMs/waitRandom, log",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.secondary,
     )

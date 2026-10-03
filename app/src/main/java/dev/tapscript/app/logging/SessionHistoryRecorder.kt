@@ -7,15 +7,27 @@ import dev.tapscript.engine.api.model.AutomationRunRecord
 import dev.tapscript.engine.api.model.RunOutcome
 import dev.tapscript.engine.api.ports.AutomationLogger
 import dev.tapscript.engine.api.ports.SessionHistoryRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class SessionHistoryRecorder(
     private val repository: SessionHistoryRepository,
     private val maxEntriesPerRun: Int = 5_000,
 ) : AutomationLogger {
     private val lock = Any()
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val persistenceMutex = Mutex()
     private var activeRun: MutableRun? = null
+    private var checkpointJob: Job? = null
     private val mutableLiveLogs = MutableStateFlow<List<AutomationLogEntry>>(emptyList())
 
     val liveLogs: StateFlow<List<AutomationLogEntry>> = mutableLiveLogs
@@ -23,6 +35,8 @@ class SessionHistoryRecorder(
     fun begin(profile: AutomationProfile) {
         val now = System.currentTimeMillis()
         synchronized(lock) {
+            checkpointJob?.cancel()
+            checkpointJob = null
             activeRun = MutableRun(
                 record = AutomationRunRecord(
                     profileId = profile.id,
@@ -42,6 +56,7 @@ class SessionHistoryRecorder(
     }
 
     suspend fun finish(outcome: RunOutcome) {
+        val pendingCheckpoint: Job?
         val completed = synchronized(lock) {
             val active = activeRun ?: return
             val now = System.currentTimeMillis()
@@ -52,15 +67,19 @@ class SessionHistoryRecorder(
                     message = "Session finished: ${outcome.name.lowercase()}",
                 ),
             )
+            pendingCheckpoint = checkpointJob
+            checkpointJob = null
             activeRun = null
-            mutableLiveLogs.value = emptyList()
             active.record.copy(
                 endedAtEpochMs = now,
                 outcome = outcome,
                 logs = active.logs.toList(),
             )
         }
-        repository.save(completed)
+
+        pendingCheckpoint?.cancelAndJoin()
+        persistenceMutex.withLock { repository.save(completed) }
+        mutableLiveLogs.value = emptyList()
     }
 
     override fun debug(message: String) = append(AutomationLogLevel.DEBUG, message)
@@ -94,6 +113,25 @@ class SessionHistoryRecorder(
         }
         active.logs += entry
         mutableLiveLogs.value = active.logs.toList()
+        scheduleCheckpointLocked()
+    }
+
+    private fun scheduleCheckpointLocked() {
+        if (checkpointJob?.isActive == true) return
+        checkpointJob = ioScope.launch {
+            delay(CHECKPOINT_DELAY_MS)
+            val snapshot = synchronized(lock) {
+                val active = activeRun ?: return@launch
+                active.record.copy(
+                    outcome = RunOutcome.RUNNING,
+                    logs = active.logs.toList(),
+                )
+            }
+            persistenceMutex.withLock { repository.save(snapshot) }
+            synchronized(lock) {
+                if (checkpointJob === coroutineContext[Job]) checkpointJob = null
+            }
+        }
     }
 
     private data class MutableRun(
@@ -103,5 +141,6 @@ class SessionHistoryRecorder(
 
     private companion object {
         const val MAX_THROWABLE_CHARS = 20_000
+        const val CHECKPOINT_DELAY_MS = 1_000L
     }
 }

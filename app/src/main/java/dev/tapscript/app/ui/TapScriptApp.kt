@@ -24,6 +24,7 @@ fun TapScriptApp(
         ProfileEditorScreen(
             initialProfile = editorProfile ?: AutomationProfile(name = "New profile"),
             installedApps = state.installedApps,
+            overlayPermissionGranted = state.overlayState.permissionGranted,
             screenPickerState = screenPickerState,
             onBeginLivePick = viewModel::beginScreenPick,
             onConsumeLivePick = viewModel::consumeScreenPick,

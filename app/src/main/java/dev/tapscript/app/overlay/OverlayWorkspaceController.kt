@@ -126,9 +126,12 @@ class OverlayWorkspaceController(
         }
     }
 
-    fun beginLivePick(mode: ScreenPickMode) {
+    fun beginLivePick(
+        mode: ScreenPickMode,
+        profile: AutomationProfile? = mutableState.value.selectedProfile,
+        highlightedId: String? = null,
+    ) {
         val view = composeView ?: return
-        val profile = mutableState.value.selectedProfile
         mutableState.value = mutableState.value.copy(errorMessage = null)
         view.visibility = View.INVISIBLE
         mutableState.value = mutableState.value.copy(visible = false)
@@ -136,6 +139,7 @@ class OverlayWorkspaceController(
             mode = mode,
             returnToTapScript = false,
             profile = profile,
+            highlightedId = highlightedId,
         ).onFailure { throwable ->
             view.visibility = View.VISIBLE
             mutableState.value = mutableState.value.copy(

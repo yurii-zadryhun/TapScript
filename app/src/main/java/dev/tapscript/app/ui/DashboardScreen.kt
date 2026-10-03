@@ -19,6 +19,8 @@ fun DashboardScreen(
     onRequestCapture: () -> Unit,
     onStopCapture: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
+    onSetOverlayEnabled: (Boolean) -> Unit,
+    onRequestOverlayPermission: () -> Unit,
     onCreateProfile: () -> Unit,
     onEditProfile: (AutomationProfile) -> Unit,
     onDeleteProfile: (AutomationProfile) -> Unit,
@@ -46,6 +48,13 @@ fun DashboardScreen(
                     onRequestCapture = onRequestCapture,
                     onStopCapture = onStopCapture,
                     onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+                )
+            }
+            item {
+                FloatingControlsCard(
+                    state = state.overlayState,
+                    onSetEnabled = onSetOverlayEnabled,
+                    onRequestPermission = onRequestOverlayPermission,
                 )
             }
             if (state.sessionStatus.phase !in setOf(SessionPhase.IDLE, SessionPhase.STOPPED)) {

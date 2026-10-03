@@ -72,9 +72,12 @@ class ScreenCaptureService : Service() {
 
         runCatching {
             val manager = getSystemService(MediaProjectionManager::class.java)
-            mediaProjection = manager.getMediaProjection(resultCode, resultData).also { projection ->
-                projection.registerCallback(projectionCallback, workerHandler)
+            val projection = requireNotNull(manager.getMediaProjection(resultCode, resultData)) {
+                "MediaProjection permission was not granted"
             }
+            projection.registerCallback(projectionCallback, workerHandler)
+            mediaProjection = projection
+
             densityDpi = resources.displayMetrics.densityDpi.coerceAtLeast(1)
             val size = initialInteractionSize()
             createOrResizeCapture(size.width, size.height)
@@ -137,16 +140,18 @@ class ScreenCaptureService : Service() {
         projection: MediaProjection,
         reader: ImageReader,
         size: PixelSize,
-    ): VirtualDisplay = projection.createVirtualDisplay(
-        "TapScriptCapture",
-        size.width,
-        size.height,
-        densityDpi,
-        DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-        reader.surface,
-        null,
-        workerHandler,
-    )
+    ): VirtualDisplay = requireNotNull(
+        projection.createVirtualDisplay(
+            "TapScriptCapture",
+            size.width,
+            size.height,
+            densityDpi,
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+            reader.surface,
+            null,
+            workerHandler,
+        ),
+    ) { "Unable to create virtual display" }
 
     private fun onImageAvailable(reader: ImageReader) {
         val image = reader.acquireLatestImage() ?: return

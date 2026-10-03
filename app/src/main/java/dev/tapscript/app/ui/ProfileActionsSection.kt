@@ -11,6 +11,7 @@ internal fun ProfileActionsSection(
     onAdd: () -> Unit,
     onEdit: (ActionTarget) -> Unit,
     onDelete: (ActionTarget) -> Unit,
+    onRedraw: ((ActionTarget) -> Unit)? = null,
 ) {
     EditorSection("Action targets") {
         if (actions.isEmpty()) Hint("Name tap/swipe targets once; scripts and rules reference names, not pixels.")
@@ -20,6 +21,7 @@ internal fun ProfileActionsSection(
                 subtitle = "${action.id} • ${action.kind.name.lowercase()} • ${action.start.x.shortCoordinate()}, ${action.start.y.shortCoordinate()}",
                 onEdit = { onEdit(action) },
                 onDelete = { onDelete(action) },
+                onRedraw = onRedraw?.let { redraw -> { redraw(action) } },
             )
         }
         OutlinedButton(onClick = onAdd) { Text("Add action target") }

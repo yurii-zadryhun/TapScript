@@ -13,6 +13,8 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import dev.tapscript.app.MainActivity
+import dev.tapscript.engine.api.model.ActionKind
+import dev.tapscript.engine.api.model.AutomationProfile
 import dev.tapscript.engine.api.model.NormalizedPoint
 import dev.tapscript.engine.api.model.NormalizedRect
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,7 +33,12 @@ class ScreenPickerController(context: Context) {
 
     val state: StateFlow<ScreenPickerState> = mutableState
 
-    fun start(mode: ScreenPickMode, returnToTapScript: Boolean = true): Result<Unit> = runCatching {
+    fun start(
+        mode: ScreenPickMode,
+        returnToTapScript: Boolean = true,
+        profile: AutomationProfile? = null,
+        highlightedId: String? = null,
+    ): Result<Unit> = runCatching {
         check(Settings.canDrawOverlays(applicationContext)) {
             "Display-over-other-apps permission is required for live picking"
         }
@@ -41,6 +48,8 @@ class ScreenPickerController(context: Context) {
         val view = PickerView(
             context = applicationContext,
             mode = mode,
+            profile = profile,
+            highlightedId = highlightedId,
             onComplete = ::complete,
             onCancel = { cancel(returnToTapScriptAfterPick) },
         )
@@ -96,11 +105,13 @@ class ScreenPickerController(context: Context) {
     private class PickerView(
         context: Context,
         private val mode: ScreenPickMode,
+        private val profile: AutomationProfile?,
+        private val highlightedId: String?,
         private val onComplete: (ScreenPickResult) -> Unit,
         private val onCancel: () -> Unit,
     ) : View(context) {
         private val density = resources.displayMetrics.density
-        private val scrimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(45, 0, 0, 0) }
+        private val scrimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(76, 0, 0, 0) }
         private val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.rgb(115, 160, 255)
             style = Paint.Style.STROKE
@@ -110,7 +121,27 @@ class ScreenPickerController(context: Context) {
             color = Color.argb(45, 115, 160, 255)
             style = Paint.Style.FILL
         }
-        private val panelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(225, 30, 33, 43) }
+        private val regionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(85, 220, 180)
+            style = Paint.Style.STROKE
+            strokeWidth = 2f * density
+        }
+        private val actionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(255, 190, 90)
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f * density
+        }
+        private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 4f * density
+        }
+        private val geometryLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 11f * density
+            setShadowLayer(4f * density, 0f, 0f, Color.BLACK)
+        }
+        private val panelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(230, 30, 33, 43) }
         private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             textSize = 15f * density
@@ -132,6 +163,7 @@ class ScreenPickerController(context: Context) {
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), scrimPaint)
+            drawExistingGeometry(canvas)
             drawInstruction(canvas)
             drawSelection(canvas)
         }
@@ -215,6 +247,35 @@ class ScreenPickerController(context: Context) {
             }
         }
 
+        private fun drawExistingGeometry(canvas: Canvas) {
+            val configured = profile ?: return
+            configured.regions.forEach { region ->
+                val rect = toRect(region.bounds)
+                val paint = if (region.id == highlightedId) highlightPaint else regionPaint
+                canvas.drawRect(rect, paint)
+                canvas.drawText(region.name, rect.left + 4f * density, (rect.top - 5f * density).coerceAtLeast(14f * density), geometryLabelPaint)
+            }
+            configured.actions.forEach { action ->
+                val start = toScreen(action.start)
+                val paint = if (action.id == highlightedId) highlightPaint else actionPaint
+                when (action.kind) {
+                    ActionKind.TAP -> {
+                        val radius = 12f * density
+                        canvas.drawCircle(start.first, start.second, radius, paint)
+                        canvas.drawLine(start.first - radius, start.second, start.first + radius, start.second, paint)
+                        canvas.drawLine(start.first, start.second - radius, start.first, start.second + radius, paint)
+                    }
+                    ActionKind.SWIPE -> {
+                        val end = action.end?.let(::toScreen) ?: start
+                        canvas.drawLine(start.first, start.second, end.first, end.second, paint)
+                        canvas.drawCircle(start.first, start.second, 6f * density, paint)
+                        canvas.drawCircle(end.first, end.second, 8f * density, paint)
+                    }
+                }
+                canvas.drawText(action.name, start.first + 10f * density, start.second - 10f * density, geometryLabelPaint)
+            }
+        }
+
         private fun drawInstruction(canvas: Canvas) {
             val margin = 14f * density
             val height = 72f * density
@@ -255,6 +316,16 @@ class ScreenPickerController(context: Context) {
                 }
             }
         }
+
+        private fun toRect(rect: NormalizedRect): RectF = RectF(
+            rect.left * width,
+            rect.top * height,
+            rect.right * width,
+            rect.bottom * height,
+        )
+
+        private fun toScreen(point: NormalizedPoint): Pair<Float, Float> =
+            point.x * width to point.y * height
 
         private fun normalize(x: Float, y: Float): NormalizedPoint = NormalizedPoint(
             x = (x / width.coerceAtLeast(1)).coerceIn(0f, 1f),

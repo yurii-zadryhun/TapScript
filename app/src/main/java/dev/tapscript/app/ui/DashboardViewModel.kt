@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.tapscript.app.AppGraph
+import dev.tapscript.app.overlay.FloatingOverlayState
 import dev.tapscript.engine.api.model.AutomationLogEntry
 import dev.tapscript.engine.api.model.AutomationProfile
 import dev.tapscript.engine.api.model.AutomationRunRecord
@@ -11,6 +12,7 @@ import dev.tapscript.engine.api.model.AutomationSessionStatus
 import dev.tapscript.platform.android.app.LaunchableAppInfo
 import dev.tapscript.platform.android.capture.CaptureState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -37,8 +39,9 @@ class DashboardViewModel(
         graph.captureStatusStore.state,
         graph.sessionManager.status,
         graph.historyRecorder.liveLogs,
-    ) { accessibility, capture, session, logs ->
-        DashboardRuntimeState(accessibility, capture, session, logs)
+        graph.overlayController.state,
+    ) { accessibility, capture, session, logs, overlay ->
+        DashboardRuntimeState(accessibility, capture, session, logs, overlay)
     }
 
     val uiState: StateFlow<DashboardUiState> = combine(
@@ -54,6 +57,7 @@ class DashboardViewModel(
             captureState = runtime.captureState,
             sessionStatus = runtime.sessionStatus,
             liveLogs = runtime.liveLogs,
+            overlayState = runtime.overlayState,
             errorMessage = error,
         )
     }.stateIn(
@@ -68,6 +72,7 @@ class DashboardViewModel(
 
     fun refresh() {
         accessibilityEnabled.value = graph.accessibilityStatusReader.isEnabled()
+        graph.overlayController.refresh()
         viewModelScope.launch {
             profiles.value = graph.profileRepository.list()
             runHistory.value = graph.sessionHistoryRepository.list()
@@ -109,6 +114,10 @@ class DashboardViewModel(
         }
     }
 
+    fun setOverlayEnabled(enabled: Boolean) {
+        graph.overlayController.setEnabled(enabled)
+    }
+
     fun start(profile: AutomationProfile) {
         errorMessage.value = null
         graph.sessionManager.start(profile.id)
@@ -117,7 +126,7 @@ class DashboardViewModel(
     fun stop() {
         graph.sessionManager.stop()
         viewModelScope.launch {
-            kotlinx.coroutines.delay(100)
+            delay(250)
             runHistory.value = graph.sessionHistoryRepository.list()
         }
     }
@@ -156,6 +165,7 @@ private data class DashboardRuntimeState(
     val captureState: CaptureState,
     val sessionStatus: AutomationSessionStatus,
     val liveLogs: List<AutomationLogEntry>,
+    val overlayState: FloatingOverlayState,
 )
 
 data class DashboardUiState(
@@ -166,5 +176,10 @@ data class DashboardUiState(
     val captureState: CaptureState = CaptureState.Idle,
     val sessionStatus: AutomationSessionStatus = AutomationSessionStatus(),
     val liveLogs: List<AutomationLogEntry> = emptyList(),
+    val overlayState: FloatingOverlayState = FloatingOverlayState(
+        permissionGranted = false,
+        enabled = false,
+        visible = false,
+    ),
     val errorMessage: String? = null,
 )

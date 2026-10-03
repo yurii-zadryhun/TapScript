@@ -9,13 +9,19 @@ class AutomationAccessibilityService : AccessibilityService() {
         AccessibilityServiceRegistry.service = this
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        event?.packageName
+            ?.toString()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { AccessibilityServiceRegistry.activePackage = it }
+    }
 
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
         if (AccessibilityServiceRegistry.service === this) {
             AccessibilityServiceRegistry.service = null
+            AccessibilityServiceRegistry.activePackage = null
         }
         super.onDestroy()
     }

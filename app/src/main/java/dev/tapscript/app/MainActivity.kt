@@ -35,6 +35,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val importProfilesDocument = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null && ::dashboardViewModel.isInitialized) {
+            dashboardViewModel.importProfiles(uri)
+        }
+    }
+
+    private val exportProfilesDocument = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null && ::dashboardViewModel.isInitialized) {
+            dashboardViewModel.exportProfiles(uri)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (handleCloseIntent(intent)) return
@@ -52,6 +68,8 @@ class MainActivity : ComponentActivity() {
                     onRequestCapture = ::requestScreenCapture,
                     onOpenAccessibilitySettings = ::openAccessibilitySettings,
                     onRequestOverlayPermission = ::openOverlayPermissionSettings,
+                    onImportProfiles = ::requestProfileImport,
+                    onExportProfiles = ::requestProfileExport,
                 )
             }
         }
@@ -85,6 +103,14 @@ class MainActivity : ComponentActivity() {
 
     private fun requestScreenCapture() {
         capturePermission.launch(graph.captureController.createPermissionIntent())
+    }
+
+    private fun requestProfileImport() {
+        importProfilesDocument.launch(arrayOf("application/json", "text/json", "text/plain"))
+    }
+
+    private fun requestProfileExport() {
+        exportProfilesDocument.launch("TapScript-profiles.json")
     }
 
     private fun openAccessibilitySettings() {

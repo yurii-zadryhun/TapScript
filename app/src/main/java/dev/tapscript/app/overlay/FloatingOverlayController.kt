@@ -28,6 +28,7 @@ import kotlin.math.abs
 class FloatingOverlayController(
     context: Context,
     sessionStatus: StateFlow<AutomationSessionStatus>,
+    private val onTogglePause: () -> Unit,
     private val onStopSession: () -> Unit,
 ) {
     private val applicationContext = context.applicationContext
@@ -43,6 +44,7 @@ class FloatingOverlayController(
     private var statusDot: View? = null
     private var statusText: TextView? = null
     private var profileText: TextView? = null
+    private var pauseButton: TextView? = null
     private var stopButton: TextView? = null
     private var latestStatus = AutomationSessionStatus()
 
@@ -222,6 +224,9 @@ class FloatingOverlayController(
         menu.addView(spacer(dp(10)))
 
         menu.addView(actionButton("Open TapScript") { openMainActivity() })
+        pauseButton = actionButton("Pause / resume") {
+            onTogglePause()
+        }.also(menu::addView)
         stopButton = actionButton("Stop profile") {
             onStopSession()
             hideMenu()
@@ -254,6 +259,7 @@ class FloatingOverlayController(
         menuLayout = null
         statusText = null
         profileText = null
+        pauseButton = null
         stopButton = null
     }
 
@@ -287,9 +293,9 @@ class FloatingOverlayController(
         profileText?.text = status.profileName.ifBlank { "No active profile" }
         statusText?.text = "${status.phase.displayName()}: ${status.message.ifBlank { "Ready" }}"
         val active = status.phase !in setOf(SessionPhase.IDLE, SessionPhase.STOPPED, SessionPhase.ERROR)
-        stopButton?.apply {
-            isEnabled = active
-            alpha = if (active) 1f else 0.45f
+        listOf(pauseButton, stopButton).forEach { button ->
+            button?.isEnabled = active
+            button?.alpha = if (active) 1f else 0.45f
         }
     }
 

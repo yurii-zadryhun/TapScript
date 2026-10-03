@@ -97,6 +97,7 @@ private fun AppPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = editorDialogProperties(),
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
         title = { Text("Choose target app") },
         text = {

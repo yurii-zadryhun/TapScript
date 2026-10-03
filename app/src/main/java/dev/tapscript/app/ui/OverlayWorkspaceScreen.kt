@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -45,7 +44,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -84,7 +82,7 @@ fun OverlayWorkspaceScreen(
     onConsumeLivePick: (Long) -> Unit,
     onFreezeFrame: () -> Unit,
     onClearFrozenFrame: () -> Unit,
-    onTogglePause: () -> Unit,
+    onResumeToApp: () -> Unit,
     onStopSession: () -> Unit,
     onDismissError: () -> Unit,
 ) {
@@ -98,12 +96,6 @@ fun OverlayWorkspaceScreen(
     var actionDialogOpen by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<DecisionRule?>(null) }
     var ruleDialogOpen by remember { mutableStateOf(false) }
-
-    LaunchedEffect(state.selectedProfile) {
-        if (draft?.id == state.selectedProfile?.id && draft == null) {
-            draft = state.selectedProfile
-        }
-    }
 
     LaunchedEffect(screenPickerState.resultSequence, screenPickerState.result) {
         val result = screenPickerState.result ?: return@LaunchedEffect
@@ -165,7 +157,7 @@ fun OverlayWorkspaceScreen(
                             isFreezingFrame = state.isFreezingFrame,
                             onFreezeFrame = onFreezeFrame,
                             onClearFrozenFrame = onClearFrozenFrame,
-                            onTogglePause = onTogglePause,
+                            onResumeToApp = onResumeToApp,
                             onStopSession = onStopSession,
                         )
                         WorkspaceTab.PROFILE -> ProfileWorkspaceTab(
@@ -313,7 +305,7 @@ private fun LiveWorkspaceTab(
     isFreezingFrame: Boolean,
     onFreezeFrame: () -> Unit,
     onClearFrozenFrame: () -> Unit,
-    onTogglePause: () -> Unit,
+    onResumeToApp: () -> Unit,
     onStopSession: () -> Unit,
 ) {
     Column(
@@ -323,7 +315,7 @@ private fun LiveWorkspaceTab(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        RuntimeSummaryCard(runtimeStatus, onTogglePause, onStopSession)
+        RuntimeSummaryCard(runtimeStatus, onResumeToApp, onStopSession)
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onFreezeFrame, enabled = !isFreezingFrame, modifier = Modifier.weight(1f)) {
@@ -346,7 +338,7 @@ private fun LiveWorkspaceTab(
 @Composable
 private fun RuntimeSummaryCard(
     status: AutomationSessionStatus,
-    onTogglePause: () -> Unit,
+    onResumeToApp: () -> Unit,
     onStopSession: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -363,8 +355,8 @@ private fun RuntimeSummaryCard(
             }
             val active = status.phase !in setOf(SessionPhase.IDLE, SessionPhase.STOPPED, SessionPhase.ERROR)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onTogglePause, enabled = active) {
-                    Text(if (status.phase == SessionPhase.PAUSED) "Resume" else "Pause")
+                OutlinedButton(onClick = onResumeToApp, enabled = active) {
+                    Text("Resume & close")
                 }
                 Button(onClick = onStopSession, enabled = active) { Text("Stop") }
             }
@@ -409,8 +401,9 @@ private fun OcrPreviewCard(status: AutomationSessionStatus) {
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
-                        if (observation.errorMessage != null) {
-                            Text(observation.errorMessage, color = MaterialTheme.colorScheme.error)
+                        val error = observation.errorMessage
+                        if (error != null) {
+                            Text(error, color = MaterialTheme.colorScheme.error)
                         } else {
                             Text(
                                 observation.rawText.ifBlank { "(empty OCR result)" },
@@ -588,7 +581,7 @@ private fun LogsWorkspaceTab(logs: List<AutomationLogEntry>) {
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        items(logs.takeLast(500), key = { "${it.timestampEpochMs}:${it.message.hashCode()}" }) { entry ->
+        items(logs.takeLast(500)) { entry ->
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(

@@ -11,17 +11,23 @@ import dev.tapscript.engine.api.model.AutomationLogEntry
 import dev.tapscript.engine.api.model.AutomationProfile
 import dev.tapscript.engine.api.model.AutomationRunRecord
 import dev.tapscript.engine.api.model.AutomationSessionStatus
+import dev.tapscript.engine.api.model.SessionPhase
 import dev.tapscript.platform.android.app.LaunchableAppInfo
 import dev.tapscript.platform.android.capture.CaptureState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 class DashboardViewModel(
     private val graph: AppGraph,
@@ -31,7 +37,10 @@ class DashboardViewModel(
     private val installedApps = MutableStateFlow<List<LaunchableAppInfo>>(emptyList())
     private val accessibilityEnabled = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
+    private val mutableEffects = MutableSharedFlow<DashboardEffect>(extraBufferCapacity = 1)
+    private var pendingStartProfileId: String? = null
 
+    val effects: SharedFlow<DashboardEffect> = mutableEffects.asSharedFlow()
     val screenPickerState: StateFlow<ScreenPickerState> = graph.screenPickerController.state
 
     private val contentState = combine(profiles, runHistory, installedApps) { profiles, history, apps ->
@@ -150,18 +159,64 @@ class DashboardViewModel(
 
     fun start(profile: AutomationProfile) {
         errorMessage.value = null
-        graph.sessionManager.start(profile.id)
+        if (!accessibilityEnabled.value) {
+            errorMessage.value = "Enable TapScript Accessibility before starting a profile."
+            return
+        }
+        if (graph.sessionManager.status.value.phase !in setOf(
+                SessionPhase.IDLE,
+                SessionPhase.STOPPED,
+                SessionPhase.ERROR,
+            )
+        ) {
+            errorMessage.value = "Another profile is already running."
+            return
+        }
+
+        pendingStartProfileId = profile.id
+        if (graph.captureStatusStore.state.value is CaptureState.Active) {
+            startPendingProfile()
+        } else {
+            mutableEffects.tryEmit(DashboardEffect.RequestCapturePermission)
+        }
+    }
+
+    fun onCapturePermissionResult(granted: Boolean) {
+        if (!granted) {
+            pendingStartProfileId = null
+            errorMessage.value = "Screen capture permission is required to run the profile."
+            return
+        }
+
+        viewModelScope.launch {
+            val captureState = withTimeoutOrNull(CAPTURE_START_TIMEOUT_MS) {
+                graph.captureStatusStore.state.first {
+                    it is CaptureState.Active || it is CaptureState.Error
+                }
+            }
+            when (captureState) {
+                is CaptureState.Active -> startPendingProfile()
+                is CaptureState.Error -> {
+                    pendingStartProfileId = null
+                    errorMessage.value = "Screen capture failed: ${captureState.message}"
+                }
+                else -> {
+                    pendingStartProfileId = null
+                    errorMessage.value = "Screen capture did not start in time."
+                }
+            }
+        }
     }
 
     fun stop() {
-        graph.sessionManager.stop()
         viewModelScope.launch {
-            delay(250)
+            graph.sessionManager.stopAndJoin()
             runHistory.value = graph.sessionHistoryRepository.list()
         }
     }
 
     fun stopCapture() {
+        pendingStartProfileId = null
         graph.captureController.stop()
     }
 
@@ -175,6 +230,29 @@ class DashboardViewModel(
         errorMessage.value = null
     }
 
+    private fun startPendingProfile() {
+        val profileId = pendingStartProfileId ?: return
+        pendingStartProfileId = null
+        viewModelScope.launch {
+            val profile = graph.profileRepository.get(profileId)
+            if (profile == null) {
+                errorMessage.value = "Profile was deleted before it could start."
+                graph.captureController.stop()
+                return@launch
+            }
+            if (profile.targetPackage.isNotBlank()) {
+                graph.packageLauncher.launch(profile.targetPackage)
+                    .onFailure { throwable ->
+                        errorMessage.value = throwable.message ?: "Could not launch target app"
+                        graph.captureController.stop()
+                        return@launch
+                    }
+                delay(TARGET_LAUNCH_SETTLE_MS)
+            }
+            graph.sessionManager.start(profile.id)
+        }
+    }
+
     class Factory(
         private val graph: AppGraph,
     ) : ViewModelProvider.Factory {
@@ -182,6 +260,15 @@ class DashboardViewModel(
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
             DashboardViewModel(graph) as T
     }
+
+    private companion object {
+        const val CAPTURE_START_TIMEOUT_MS = 5_000L
+        const val TARGET_LAUNCH_SETTLE_MS = 350L
+    }
+}
+
+sealed interface DashboardEffect {
+    data object RequestCapturePermission : DashboardEffect
 }
 
 private data class DashboardContentState(

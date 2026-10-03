@@ -7,13 +7,21 @@ class AutomationAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         AccessibilityServiceRegistry.service = this
+        refreshForegroundPackage(null)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        event?.packageName
-            ?.toString()
+        refreshForegroundPackage(event)
+    }
+
+    fun currentForegroundPackage(): String? {
+        val rootPackage = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull()
             ?.takeIf { it.isNotBlank() }
-            ?.let { AccessibilityServiceRegistry.activePackage = it }
+        if (rootPackage != null) {
+            AccessibilityServiceRegistry.activePackage = rootPackage
+            return rootPackage
+        }
+        return AccessibilityServiceRegistry.activePackage
     }
 
     override fun onInterrupt() = Unit
@@ -24,5 +32,15 @@ class AutomationAccessibilityService : AccessibilityService() {
             AccessibilityServiceRegistry.activePackage = null
         }
         super.onDestroy()
+    }
+
+    private fun refreshForegroundPackage(event: AccessibilityEvent?) {
+        val rootPackage = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull()
+            ?.takeIf { it.isNotBlank() }
+        val eventPackage = event?.packageName
+            ?.toString()
+            ?.takeIf { it.isNotBlank() }
+        val candidate = rootPackage ?: eventPackage ?: return
+        AccessibilityServiceRegistry.activePackage = candidate
     }
 }

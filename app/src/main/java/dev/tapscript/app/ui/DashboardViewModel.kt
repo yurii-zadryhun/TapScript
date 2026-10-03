@@ -1,5 +1,6 @@
 package dev.tapscript.app.ui
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -37,6 +38,7 @@ class DashboardViewModel(
     private val installedApps = MutableStateFlow<List<LaunchableAppInfo>>(emptyList())
     private val accessibilityEnabled = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
+    private val infoMessage = MutableStateFlow<String?>(null)
     private val mutableEffects = MutableSharedFlow<DashboardEffect>(extraBufferCapacity = 1)
     private var pendingStartProfileId: String? = null
 
@@ -61,7 +63,8 @@ class DashboardViewModel(
         contentState,
         runtimeState,
         errorMessage,
-    ) { content, runtime, error ->
+        infoMessage,
+    ) { content, runtime, error, info ->
         DashboardUiState(
             profiles = content.profiles,
             runHistory = content.runHistory,
@@ -72,6 +75,7 @@ class DashboardViewModel(
             liveLogs = runtime.liveLogs,
             overlayState = runtime.overlayState,
             errorMessage = error,
+            infoMessage = info,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -108,6 +112,27 @@ class DashboardViewModel(
             runCatching { graph.profileRepository.delete(profile.id) }
                 .onSuccess { refresh() }
                 .onFailure { errorMessage.value = it.message }
+        }
+    }
+
+    fun importProfiles(uri: Uri) {
+        viewModelScope.launch {
+            runCatching { graph.profileTransferService.importFrom(uri) }
+                .onSuccess { imported ->
+                    profiles.value = graph.profileRepository.list()
+                    infoMessage.value = "Imported $imported profile${if (imported == 1) "" else "s"}."
+                }
+                .onFailure { errorMessage.value = it.message ?: "Could not import profiles" }
+        }
+    }
+
+    fun exportProfiles(uri: Uri) {
+        viewModelScope.launch {
+            runCatching { graph.profileTransferService.exportTo(uri) }
+                .onSuccess { exported ->
+                    infoMessage.value = "Exported $exported profile${if (exported == 1) "" else "s"}."
+                }
+                .onFailure { errorMessage.value = it.message ?: "Could not export profiles" }
         }
     }
 
@@ -221,6 +246,10 @@ class DashboardViewModel(
         errorMessage.value = null
     }
 
+    fun clearInfo() {
+        infoMessage.value = null
+    }
+
     private fun startPendingProfile() {
         val profileId = pendingStartProfileId ?: return
         pendingStartProfileId = null
@@ -290,4 +319,5 @@ data class DashboardUiState(
         visible = false,
     ),
     val errorMessage: String? = null,
+    val infoMessage: String? = null,
 )

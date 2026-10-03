@@ -52,6 +52,11 @@ internal fun RuntimeCard(state: DashboardUiState, onStopSession: () -> Unit) {
                     }
                 }
             }
+            if (state.liveLogs.isNotEmpty()) {
+                HorizontalDivider()
+                Text("Recent logs", style = MaterialTheme.typography.labelLarge)
+                state.liveLogs.takeLast(4).forEach { LogEntryRow(it) }
+            }
         }
     }
 }

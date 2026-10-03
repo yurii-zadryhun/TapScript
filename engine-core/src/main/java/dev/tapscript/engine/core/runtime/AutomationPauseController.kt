@@ -34,6 +34,8 @@ class AutomationPauseController {
 
     fun isPaused(): Boolean = synchronized(lock) { reasons.isNotEmpty() }
 
+    fun isPaused(token: String): Boolean = synchronized(lock) { reasons.containsKey(token) }
+
     companion object {
         const val MANUAL_TOKEN = "manual"
         const val OVERLAY_TOKEN = "overlay-workspace"

@@ -5,6 +5,7 @@ import dev.tapscript.engine.api.model.RunOutcome
 import dev.tapscript.engine.api.model.SessionPhase
 import dev.tapscript.engine.api.ports.AutomationLogger
 import dev.tapscript.engine.api.ports.ProfileRepository
+import dev.tapscript.engine.core.runtime.AutomationPauseController
 import dev.tapscript.engine.core.runtime.AutomationRunner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -17,6 +18,7 @@ class AutomationSessionManager(
     private val scope: CoroutineScope,
     private val profileRepository: ProfileRepository,
     private val runner: AutomationRunner,
+    private val pauseController: AutomationPauseController,
     private val logger: AutomationLogger,
     private val historyRecorder: SessionHistoryRecorder,
 ) {
@@ -52,8 +54,26 @@ class AutomationSessionManager(
         }
     }
 
+    fun pause() {
+        if (sessionJob?.isActive != true) return
+        pauseController.pause(AutomationPauseController.MANUAL_TOKEN, "Paused by user")
+    }
+
+    fun resume() {
+        pauseController.resume(AutomationPauseController.MANUAL_TOKEN)
+    }
+
+    fun togglePause() {
+        if (pauseController.isPaused()) {
+            resume()
+        } else {
+            pause()
+        }
+    }
+
     fun stop() {
         if (sessionJob?.isActive == true) logger.info("Stop requested")
+        pauseController.clear()
         sessionJob?.cancel()
         sessionJob = null
     }

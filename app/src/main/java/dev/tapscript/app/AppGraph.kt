@@ -14,6 +14,7 @@ import dev.tapscript.engine.core.frame.SampledFrameChangeDetector
 import dev.tapscript.engine.core.recognition.BitmapRegionCropper
 import dev.tapscript.engine.core.recognition.RecognitionPipeline
 import dev.tapscript.engine.core.recognition.RegexValueExtractor
+import dev.tapscript.engine.core.runtime.AutomationPauseController
 import dev.tapscript.engine.core.runtime.AutomationRunner
 import dev.tapscript.platform.android.accessibility.AccessibilityForegroundAppReader
 import dev.tapscript.platform.android.accessibility.AccessibilityStatusReader
@@ -50,6 +51,7 @@ class AppGraph(context: Context) {
     val installedAppProvider = AndroidInstalledAppProvider(applicationContext)
     val profileRepository = JsonProfileRepository(applicationContext)
     val screenPickerController = ScreenPickerController(applicationContext)
+    val pauseController = AutomationPauseController()
 
     private val textRecognizer = MlKitTextRecognizer()
     private val recognitionPipeline = RecognitionPipeline(
@@ -75,6 +77,7 @@ class AppGraph(context: Context) {
         decisionEngine = decisionEngine,
         commandExecutor = commandExecutor,
         foregroundAppReader = foregroundAppReader,
+        pauseController = pauseController,
         logger = logger,
     )
 
@@ -82,6 +85,7 @@ class AppGraph(context: Context) {
         scope = applicationScope,
         profileRepository = profileRepository,
         runner = automationRunner,
+        pauseController = pauseController,
         logger = logger,
         historyRecorder = historyRecorder,
     )
@@ -89,6 +93,7 @@ class AppGraph(context: Context) {
     val overlayController = FloatingOverlayController(
         context = applicationContext,
         sessionStatus = sessionManager.status,
+        onTogglePause = sessionManager::togglePause,
         onStopSession = sessionManager::stop,
     )
 

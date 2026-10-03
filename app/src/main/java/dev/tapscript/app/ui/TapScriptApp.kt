@@ -51,7 +51,6 @@ fun TapScriptApp(
         DashboardScreen(
             state = state,
             onOpenAccessibilitySettings = onOpenAccessibilitySettings,
-            onSetOverlayEnabled = viewModel::setOverlayEnabled,
             onRequestOverlayPermission = onRequestOverlayPermission,
             onCreateProfile = { creatingProfile = true },
             onEditProfile = { editorProfile = it },

@@ -4,6 +4,7 @@ import android.content.Context
 import dev.tapscript.app.logging.CompositeAutomationLogger
 import dev.tapscript.app.logging.SessionHistoryRecorder
 import dev.tapscript.app.overlay.FloatingOverlayController
+import dev.tapscript.app.overlay.OverlayWorkspaceController
 import dev.tapscript.app.overlay.ScreenPickerController
 import dev.tapscript.engine.core.action.ActionResolver
 import dev.tapscript.engine.core.action.CommandExecutor
@@ -90,9 +91,23 @@ class AppGraph(context: Context) {
         historyRecorder = historyRecorder,
     )
 
+    val workspaceController = OverlayWorkspaceController(
+        context = applicationContext,
+        profileRepository = profileRepository,
+        installedAppProvider = installedAppProvider,
+        frameBus = frameBus,
+        screenPickerController = screenPickerController,
+        pauseController = pauseController,
+        sessionStatus = sessionManager.status,
+        liveLogs = historyRecorder.liveLogs,
+        onTogglePause = sessionManager::togglePause,
+        onStopSession = sessionManager::stop,
+    )
+
     val overlayController = FloatingOverlayController(
         context = applicationContext,
         sessionStatus = sessionManager.status,
+        onOpenWorkspace = { workspaceController.open() },
         onTogglePause = sessionManager::togglePause,
         onStopSession = sessionManager::stop,
     )

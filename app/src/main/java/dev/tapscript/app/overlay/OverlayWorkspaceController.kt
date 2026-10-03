@@ -128,17 +128,21 @@ class OverlayWorkspaceController(
 
     fun beginLivePick(mode: ScreenPickMode) {
         val view = composeView ?: return
+        val profile = mutableState.value.selectedProfile
         mutableState.value = mutableState.value.copy(errorMessage = null)
         view.visibility = View.INVISIBLE
         mutableState.value = mutableState.value.copy(visible = false)
-        screenPickerController.start(mode, returnToTapScript = false)
-            .onFailure { throwable ->
-                view.visibility = View.VISIBLE
-                mutableState.value = mutableState.value.copy(
-                    visible = true,
-                    errorMessage = throwable.message ?: "Could not start visual picker",
-                )
-            }
+        screenPickerController.start(
+            mode = mode,
+            returnToTapScript = false,
+            profile = profile,
+        ).onFailure { throwable ->
+            view.visibility = View.VISIBLE
+            mutableState.value = mutableState.value.copy(
+                visible = true,
+                errorMessage = throwable.message ?: "Could not start visual picker",
+            )
+        }
     }
 
     fun consumeScreenPick(sequence: Long) {

@@ -19,6 +19,7 @@ class MainActivity : ComponentActivity() {
         get() = (application as TapScriptApplication).graph
 
     private lateinit var dashboardViewModel: DashboardViewModel
+    private var closeHandled = false
 
     private val capturePermission = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -67,9 +68,17 @@ class MainActivity : ComponentActivity() {
         if (::dashboardViewModel.isInitialized) dashboardViewModel.refresh()
     }
 
+    override fun onDestroy() {
+        if (isFinishing && !isChangingConfigurations && !closeHandled) {
+            graph.shutdownRuntime()
+        }
+        super.onDestroy()
+    }
+
     private fun handleCloseIntent(intent: Intent?): Boolean {
         if (intent?.action != ACTION_CLOSE) return false
-        graph.overlayController.closeOverlay()
+        closeHandled = true
+        graph.shutdownRuntime()
         finishAndRemoveTask()
         return true
     }

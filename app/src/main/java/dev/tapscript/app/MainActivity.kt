@@ -12,6 +12,7 @@ import androidx.lifecycle.ViewModelProvider
 import dev.tapscript.app.ui.DashboardViewModel
 import dev.tapscript.app.ui.TapScriptApp
 import dev.tapscript.app.ui.theme.TapScriptTheme
+import dev.tapscript.platform.android.capture.CaptureState
 
 class MainActivity : ComponentActivity() {
     private val graph: AppGraph
@@ -23,8 +24,13 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
         val data = result.data
-        if (graph.captureController.isPermissionResultValid(result.resultCode, data)) {
+        val granted = graph.captureController.isPermissionResultValid(result.resultCode, data)
+        if (granted) {
+            graph.captureStatusStore.update(CaptureState.Starting)
             graph.captureController.start(result.resultCode, requireNotNull(data))
+        }
+        if (::dashboardViewModel.isInitialized) {
+            dashboardViewModel.onCapturePermissionResult(granted)
         }
     }
 

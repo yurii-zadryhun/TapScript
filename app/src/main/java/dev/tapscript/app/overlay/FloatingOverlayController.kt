@@ -28,6 +28,7 @@ import kotlin.math.abs
 class FloatingOverlayController(
     context: Context,
     sessionStatus: StateFlow<AutomationSessionStatus>,
+    private val onOpenWorkspace: () -> Unit,
     private val onTogglePause: () -> Unit,
     private val onStopSession: () -> Unit,
 ) {
@@ -223,7 +224,11 @@ class FloatingOverlayController(
         statusText = textView("", 13f, SECONDARY_TEXT).also(menu::addView)
         menu.addView(spacer(dp(10)))
 
-        menu.addView(actionButton("Open TapScript") { openMainActivity() })
+        menu.addView(actionButton("Workspace") {
+            hideMenu()
+            onOpenWorkspace()
+        })
+        menu.addView(actionButton("Open full app") { openMainActivity() })
         pauseButton = actionButton("Pause / resume") {
             onTogglePause()
         }.also(menu::addView)

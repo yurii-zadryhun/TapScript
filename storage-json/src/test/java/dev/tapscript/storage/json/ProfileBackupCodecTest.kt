@@ -27,14 +27,14 @@ class ProfileBackupCodecTest {
     fun acceptsSingleProfileJsonForConvenientImport() {
         val decoded = codec.decode(
             """{
-              \"id\": \"single\",
-              \"name\": \"Single profile\",
-              \"targetPackage\": \"\",
-              \"regions\": [],
-              \"actions\": [],
-              \"logic\": {\"mode\": \"RULES\", \"rules\": [], \"script\": \"\"},
-              \"settings\": {\"minFrameIntervalMs\": 120, \"changeThreshold\": 0.02, \"postActionCooldownMs\": 0},
-              \"schemaVersion\": 1
+              "id": "single",
+              "name": "Single profile",
+              "targetPackage": "",
+              "regions": [],
+              "actions": [],
+              "logic": {"mode": "RULES", "rules": [], "script": ""},
+              "settings": {"minFrameIntervalMs": 120, "changeThreshold": 0.02, "postActionCooldownMs": 0},
+              "schemaVersion": 1
             }""".trimIndent(),
         )
 
@@ -46,9 +46,9 @@ class ProfileBackupCodecTest {
         val error = runCatching {
             codec.decode(
                 """{
-                  \"format\": \"tapscript-profile-backup\",
-                  \"version\": 999,
-                  \"profiles\": []
+                  "format": "tapscript-profile-backup",
+                  "version": 999,
+                  "profiles": []
                 }""".trimIndent(),
             )
         }.exceptionOrNull()

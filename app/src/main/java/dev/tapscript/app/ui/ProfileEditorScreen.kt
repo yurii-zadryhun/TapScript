@@ -12,10 +12,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.tapscript.engine.api.model.*
+import dev.tapscript.platform.android.app.LaunchableAppInfo
 
 @Composable
 fun ProfileEditorScreen(
     initialProfile: AutomationProfile,
+    installedApps: List<LaunchableAppInfo>,
     onCancel: () -> Unit,
     onSave: (AutomationProfile) -> Unit,
 ) {
@@ -55,7 +57,7 @@ fun ProfileEditorScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             EditorHeader(onCancel)
-            ProfileIdentitySection(profile) { profile = it }
+            ProfileIdentitySection(profile, installedApps) { profile = it }
             ProfileRuntimeSection(profile) { profile = it }
             AuthoringReferenceSection(
                 bitmap = referenceBitmap,
@@ -116,7 +118,6 @@ fun ProfileEditorScreen(
             )
         }
     }
-
 
     referenceBitmap?.let { bitmap ->
         when (visualPickMode) {

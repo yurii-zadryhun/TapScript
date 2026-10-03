@@ -13,7 +13,7 @@ import org.mozilla.javascript.Undefined
 
 class RhinoScriptEngine(
     private val gson: Gson = Gson(),
-    timeoutMs: Long = 100,
+    timeoutMs: Long = DEFAULT_TIMEOUT_MS,
     private val commandLimit: Int = 256,
 ) : ScriptEngine {
     private val contextFactory = TimedContextFactory(timeoutMs)
@@ -126,6 +126,7 @@ class RhinoScriptEngine(
     }
 
     private companion object {
+        const val DEFAULT_TIMEOUT_MS = 500L
         const val MAX_POSITION_JITTER_PX = 1_000
         const val MAX_WAIT_MS = 60_000L
     }

@@ -32,6 +32,7 @@ data class RegionObservation(
 data class AutomationSnapshot(
     val values: Map<String, Any?>,
     val frameCapturedAtNanos: Long,
+    val observations: List<RegionObservation> = emptyList(),
 )
 
 data class AutomationMetrics(
@@ -43,6 +44,7 @@ data class AutomationMetrics(
 
 data class AutomationSessionStatus(
     val phase: SessionPhase = SessionPhase.IDLE,
+    val profileId: String = "",
     val profileName: String = "",
     val message: String = "",
     val snapshot: AutomationSnapshot? = null,

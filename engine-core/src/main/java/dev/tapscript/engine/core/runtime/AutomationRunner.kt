@@ -1,5 +1,6 @@
 package dev.tapscript.engine.core.runtime
 
+import dev.tapscript.engine.api.command.AutomationCommand
 import dev.tapscript.engine.api.model.AutomationMetrics
 import dev.tapscript.engine.api.model.AutomationProfile
 import dev.tapscript.engine.api.model.AutomationSessionStatus
@@ -74,6 +75,7 @@ class AutomationRunner(
                     if (runtimePauseReason != pauseBeforeFrame) {
                         logger.info("Paused '${profile.name}': $pauseBeforeFrame")
                         runtimePauseReason = pauseBeforeFrame
+                        commandExecutor.clearVisuals()
                     }
                     mutableStatus.value = mutableStatus.value.copy(
                         phase = SessionPhase.PAUSED,
@@ -98,6 +100,7 @@ class AutomationRunner(
                         if (runtimePauseReason != pauseAfterFrame) {
                             logger.info("Paused '${profile.name}': $pauseAfterFrame")
                             runtimePauseReason = pauseAfterFrame
+                            commandExecutor.clearVisuals()
                         }
                         mutableStatus.value = mutableStatus.value.copy(
                             phase = SessionPhase.PAUSED,
@@ -117,6 +120,7 @@ class AutomationRunner(
                                     "Paused '${profile.name}': target app '$targetPackage' is not active" +
                                         (activePackage?.let { " (active: '$it')" } ?: " (active app unknown)"),
                                 )
+                                commandExecutor.clearVisuals()
                             }
                             pausedForTarget = true
                             mutableStatus.value = mutableStatus.value.copy(
@@ -176,6 +180,10 @@ class AutomationRunner(
                     val decisionMs = (System.nanoTime() - decisionStarted) / 1_000_000
                     val commands = decision.commands
 
+                    if (decision.error != null) {
+                        commandExecutor.clearVisuals()
+                    }
+
                     var lastCommand = lastMetrics.lastCommand
                     commandExecutor.execute(
                         commands = commands,
@@ -206,7 +214,7 @@ class AutomationRunner(
                         metrics = lastMetrics,
                     )
 
-                    if (commands.isNotEmpty() && profile.settings.postActionCooldownMs > 0) {
+                    if (commands.containsGesture() && profile.settings.postActionCooldownMs > 0) {
                         delay(profile.settings.postActionCooldownMs)
                     }
                 } finally {
@@ -229,11 +237,20 @@ class AutomationRunner(
                 profileName = profile.name,
                 message = throwable.message ?: throwable::class.java.simpleName,
             )
+        } finally {
+            commandExecutor.clearVisuals()
         }
     }
 
     private fun recycle(frame: ScreenFrame) {
         if (!frame.bitmap.isRecycled) frame.bitmap.recycle()
+    }
+
+    private fun List<AutomationCommand>.containsGesture(): Boolean = any { command ->
+        command is AutomationCommand.Tap ||
+            command is AutomationCommand.RandomTap ||
+            command is AutomationCommand.Swipe ||
+            command is AutomationCommand.RandomSwipe
     }
 
     private companion object {

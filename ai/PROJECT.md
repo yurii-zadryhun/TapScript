@@ -2,17 +2,17 @@
 
 ## Product
 
-TapScript is a personal Android visual automation tool. A profile defines what to observe on screen, how to extract values, what logic to run, and which named gestures to execute. The intended authoring flow is visual rather than coordinate-first.
+TapScript is a personal Android visual automation tool. A profile defines what to observe on screen, how to extract values, what logic to run, and which named gestures or advisory visuals to emit. The intended authoring flow is visual rather than coordinate-first.
 
 Runtime pipeline:
 
-`MediaProjection frame -> ROI change detection -> ROI OCR -> regex extractors -> variables/snapshot -> rules or Rhino JS -> semantic commands -> Accessibility gestures`
+`MediaProjection frame -> ROI change detection -> ROI OCR -> regex extractors -> variables/snapshot -> rules or Rhino JS -> semantic commands -> gestures/runtime visuals`
 
 ## Modules
 
-- `app`: Compose UI, dependency graph, profile/session orchestration, overlay workspace, floating controls, history UI, crash diagnostics, Android document import/export flow.
+- `app`: Compose UI, dependency graph, profile/session orchestration, overlay workspace, floating controls, runtime visual overlay, history UI, crash diagnostics, Android document import/export flow.
 - `engine-api`: stable models, ports, commands.
-- `engine-core`: capture-frame flow, recognition orchestration, decision/rule logic, pause ownership, command execution.
+- `engine-core`: capture-frame flow, recognition orchestration, decision/rule logic, pause ownership, command execution and visual-target resolution.
 - `platform-android`: MediaProjection capture, Accessibility gestures/foreground-app events, package launching/app discovery.
 - `recognition-mlkit`: on-device ML Kit text recognition.
 - `scripting-rhino`: constrained JavaScript command API.
@@ -28,6 +28,9 @@ Runtime pipeline:
 - The overlay workspace is the long-term primary runtime UI: inspect variables/OCR/logs and edit profiles without leaving the target app.
 - Overlay-hosted UI must not use child-window Compose dialogs/dropdowns. A real-device crash showed `WindowManager.BadTokenException` from `AndroidDialog`; overlay editors/selectors/errors are therefore inline in the overlay window.
 - OCR regions, tap points, and swipe paths are shown on a dimmed overlay over the real target app. Existing geometry can be highlighted/redrawn while preserving ids/configuration. Numeric coordinate editing is an advanced fallback.
+- Scripts can emit non-interactive keyed runtime visuals with `highlight`, `showInfo`, `clearVisual`, and `clearVisuals`. Reusing a key updates the same visual instead of stacking copies.
+- Runtime visuals are cleared on pause, target-app loss, script error, profile stop, and TapScript shutdown. Visual-only commands do not trigger post-gesture cooldown.
+- Region highlights are drawn outside the OCR ROI so MediaProjection capture does not paint over recognized text or create a watched-region feedback loop.
 - Run history is persistent JSON. Active runs checkpoint logs to disk so a crash does not erase the whole session.
 - Script `log()` uses the application logger and belongs in live logs + persistent run history.
 - Deterministic and randomized scripting commands coexist. Randomized commands are explicit (`tapRandom`, `swipeRandom`, `waitRandom`); deterministic commands remain unchanged.
@@ -35,9 +38,13 @@ Runtime pipeline:
 
 ## Dungeon Rush sample policy
 
-The built-in loot evaluator uses normalized roll quality (`abs(value) / cap`) multiplied by configurable category weights: excellent 140, great 100, good 50, ok 12, bad 2. Item level contributes at most 30 points and is used only when both compared item levels are recognized. Candidate text containing `Melee Weapon` is a hard reject. The scorer includes all normal/exceptional affixes currently known from the game screenshots and accepts common `Defence/Defense` and `Crit/Critical` aliases.
+The built-in loot evaluator is now an advisory **shadow-mode** profile: it scores the candidate and equipped item, highlights the recommended item/action, renders an explainable breakdown, and never emits Sell/Equip gesture commands.
 
-Static defence weights are temporary. Future loadout-aware scoring should use marginal value from the real defence formula and remaining headroom to 100% Critical Damage Taken reduction.
+The calibrated stateless weights are: excellent 180, great 100, good 55, ok 12, bad 2. Item level contributes at most 30 points and is used only when both compared item levels are recognized. Normal non-melee items must parse 4–5 known percentage affixes or the advisor fails closed with `CHECK OCR`.
+
+Melee candidates are hard rejects based on the item-title marker `[Melee]`; `[Meele]` is also accepted as a defensive OCR/transposition variant.
+
+Loadout-aware scoring remains future work. It should evaluate marginal whole-build value: Triple Hit and Critical Damage Taken need build-level combat caps near 100%, Double Hit loses value as Triple Hit approaches 100%, and cap handling must be replacement-aware rather than adding a candidate on top of the item it replaces.
 
 ## Android constraints
 
@@ -53,4 +60,4 @@ Static defence weights are temporary. Future loadout-aware scoring should use ma
 - CI workflow: `.github/workflows/build.yml`.
 - Required green gate: unit tests + Android lint + debug APK + release APK.
 - Release signing material is intentionally outside Git. Never regenerate or replace the release key casually because installed-app upgrades depend on certificate continuity.
-- Current development version: `0.2.0-alpha4` / versionCode 4.
+- Current development version remains `0.2.0-alpha4` / versionCode 4 until the next release bump.

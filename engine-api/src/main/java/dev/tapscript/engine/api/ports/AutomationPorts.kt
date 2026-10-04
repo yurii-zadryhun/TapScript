@@ -5,10 +5,31 @@ import dev.tapscript.engine.api.model.AutomationProfile
 import dev.tapscript.engine.api.model.AutomationRunRecord
 import dev.tapscript.engine.api.model.AutomationSnapshot
 import dev.tapscript.engine.api.model.PixelPoint
+import dev.tapscript.engine.api.model.VisualTargetGeometry
+import dev.tapscript.engine.api.model.VisualTone
 
 interface GestureDispatcher {
     suspend fun tap(point: PixelPoint): Result<Unit>
     suspend fun swipe(start: PixelPoint, end: PixelPoint, durationMs: Long): Result<Unit>
+}
+
+interface RuntimeVisualPresenter {
+    suspend fun showHighlight(
+        key: String,
+        target: VisualTargetGeometry,
+        label: String,
+        tone: VisualTone,
+    ): Result<Unit>
+
+    suspend fun showInfo(
+        key: String,
+        title: String,
+        body: String,
+        tone: VisualTone,
+    ): Result<Unit>
+
+    suspend fun clear(key: String): Result<Unit>
+    suspend fun clearAll(): Result<Unit>
 }
 
 interface ScriptEngine {

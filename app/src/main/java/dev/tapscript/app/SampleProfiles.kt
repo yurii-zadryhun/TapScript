@@ -60,17 +60,24 @@ object SampleProfiles {
     )
 
     /**
-     * Updates only the known first-generation demo script. User-authored scripts are never overwritten.
-     * Geometry, target app, names, actions, and runtime settings stay untouched.
+     * Upgrades only known built-in loot evaluator generations. User-authored scripts are never
+     * overwritten. Geometry, target app, names, actions, and runtime settings stay untouched.
      */
     fun upgradeLegacyLootEvaluator(profile: AutomationProfile): AutomationProfile? {
         if (profile.id != LOOT_PROFILE_ID) return null
         val script = profile.logic.script
-        val looksLikeLegacyDemo =
+        val looksLikeFirstGenerationDemo =
             script.contains("Candidate wins:") &&
                 script.contains("\"Triple Hit Chance\": 140") &&
                 !script.contains("mega crit chance", ignoreCase = true)
-        if (!looksLikeLegacyDemo) return null
+        val looksLikeAlpha4AutoTapDemo =
+            script.contains("const categoryWeights = {") &&
+                script.contains("excellent: 140") &&
+                script.contains("tapRandom(\"equip\", 8)") &&
+                script.contains("tapRandom(\"sell\", 8)") &&
+                script.contains("function isMeleeWeapon")
+
+        if (!looksLikeFirstGenerationDemo && !looksLikeAlpha4AutoTapDemo) return null
 
         val newRegionConfig = lootEvaluator().regions.associateBy { it.id }
         return profile.copy(

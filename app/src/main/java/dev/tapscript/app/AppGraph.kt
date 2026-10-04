@@ -6,6 +6,7 @@ import dev.tapscript.app.logging.CompositeAutomationLogger
 import dev.tapscript.app.logging.SessionHistoryRecorder
 import dev.tapscript.app.overlay.FloatingOverlayController
 import dev.tapscript.app.overlay.OverlayWorkspaceController
+import dev.tapscript.app.overlay.RuntimeVisualOverlayController
 import dev.tapscript.app.overlay.ScreenPickerController
 import dev.tapscript.app.profile.ProfileTransferService
 import dev.tapscript.engine.api.model.AutomationLogEntry
@@ -62,6 +63,7 @@ class AppGraph(
     val profileRepository = JsonProfileRepository(applicationContext)
     val profileTransferService = ProfileTransferService(applicationContext, profileRepository)
     val screenPickerController = ScreenPickerController(applicationContext)
+    val runtimeVisualController = RuntimeVisualOverlayController(applicationContext)
     val pauseController = AutomationPauseController()
 
     private val textRecognizer = MlKitTextRecognizer()
@@ -79,6 +81,7 @@ class AppGraph(
         gestureDispatcher = AndroidGestureDispatcher(),
         actionResolver = ActionResolver(),
         logger = logger,
+        visualPresenter = runtimeVisualController,
     )
 
     val automationRunner = AutomationRunner(
@@ -137,6 +140,7 @@ class AppGraph(
     }
 
     fun shutdownRuntime() {
+        runtimeVisualController.dismiss()
         screenPickerController.cancel(returnToTapScript = false)
         workspaceController.close()
         sessionManager.stop()

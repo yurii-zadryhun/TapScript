@@ -2,11 +2,10 @@
 
 Canonical current-state backlog. Keep this file short and actionable. Every completed development action must update this file; rewrite the current state instead of adding a chronological log.
 
-**Current checkpoint:** `feature/loot-shadow-mode` adds keyed runtime advisory visuals plus a calibrated Dungeon Rush shadow-mode loot advisor on top of the CI-verified `0.2.0-alpha4` runtime branch. Code/tests/docs are implemented; GitHub CI and physical-device visual alignment still need validation before merging back into `feature/runtime-experience`.
+**Current checkpoint:** `feature/loot-shadow-mode` adds keyed runtime advisory visuals plus a calibrated Dungeon Rush shadow-mode loot advisor on top of the CI-verified `0.2.0-alpha4` runtime branch. GitHub CI is green (`tests + lint + debug/release build`); physical-device visual alignment and real OCR behavior still need validation before merging back into `feature/runtime-experience`.
 
 ## P0 — validate loot shadow mode
 
-- Get CI green for `feature/loot-shadow-mode`: unit tests + Android lint + debug/release build.
 - On the Galaxy S24 Ultra, verify `highlight()` alignment for both OCR regions and Sell/Equip targets while Dungeon Rush is foreground.
 - Confirm the information card is readable without blocking the loot popup and that repeated OCR decisions update stable keys rather than stacking overlays.
 - Confirm region outlines stay outside OCR rectangles and do not destabilize OCR/change detection through MediaProjection feedback.

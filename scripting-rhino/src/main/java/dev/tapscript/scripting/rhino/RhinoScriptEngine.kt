@@ -2,6 +2,7 @@ package dev.tapscript.scripting.rhino
 
 import com.google.gson.Gson
 import dev.tapscript.engine.api.command.AutomationCommand
+import dev.tapscript.engine.api.model.VisualTone
 import dev.tapscript.engine.api.ports.ScriptEngine
 import dev.tapscript.engine.api.ports.ScriptRequest
 import dev.tapscript.engine.api.ports.ScriptResult
@@ -81,6 +82,34 @@ class RhinoScriptEngine(
         putFunction(scope, "log") { args ->
             addCommand(commands, AutomationCommand.Log(Context.toString(args.getOrNull(0))))
         }
+        putFunction(scope, "highlight") { args ->
+            addCommand(
+                commands,
+                AutomationCommand.Highlight(
+                    key = requiredString(args, 0, "highlight"),
+                    targetId = requiredString(args, 1, "highlight"),
+                    label = optionalString(args, 2, ""),
+                    tone = optionalVisualTone(args, 3, VisualTone.INFO, "highlight"),
+                ),
+            )
+        }
+        putFunction(scope, "showInfo") { args ->
+            addCommand(
+                commands,
+                AutomationCommand.ShowInfo(
+                    key = requiredString(args, 0, "showInfo"),
+                    title = requiredString(args, 1, "showInfo"),
+                    body = optionalString(args, 2, ""),
+                    tone = optionalVisualTone(args, 3, VisualTone.INFO, "showInfo"),
+                ),
+            )
+        }
+        putFunction(scope, "clearVisual") { args ->
+            addCommand(commands, AutomationCommand.ClearVisual(requiredString(args, 0, "clearVisual")))
+        }
+        putFunction(scope, "clearVisuals") {
+            addCommand(commands, AutomationCommand.ClearVisuals)
+        }
     }
 
     private fun putFunction(scope: Scriptable, name: String, callback: (Array<out Any?>) -> Unit) {
@@ -105,7 +134,13 @@ class RhinoScriptEngine(
 
     private fun requiredString(args: Array<out Any?>, index: Int, function: String): String {
         val value = args.getOrNull(index)
-        require(value != null && value != Undefined.instance) { "$function requires an action id" }
+        require(value != null && value != Undefined.instance) { "$function requires argument ${index + 1}" }
+        return Context.toString(value)
+    }
+
+    private fun optionalString(args: Array<out Any?>, index: Int, default: String): String {
+        val value = args.getOrNull(index)
+        if (value == null || value == Undefined.instance) return default
         return Context.toString(value)
     }
 
@@ -123,6 +158,26 @@ class RhinoScriptEngine(
         val number = Context.toNumber(value)
         require(number.isFinite()) { "Optional numeric argument ${index + 1} must be finite" }
         return number.toLong()
+    }
+
+    private fun optionalVisualTone(
+        args: Array<out Any?>,
+        index: Int,
+        default: VisualTone,
+        function: String,
+    ): VisualTone {
+        val value = args.getOrNull(index)
+        if (value == null || value == Undefined.instance) return default
+        return when (Context.toString(value).trim().lowercase()) {
+            "neutral" -> VisualTone.NEUTRAL
+            "info" -> VisualTone.INFO
+            "success", "positive" -> VisualTone.SUCCESS
+            "warning", "warn" -> VisualTone.WARNING
+            "danger", "error", "negative" -> VisualTone.DANGER
+            else -> error(
+                "$function tone must be one of neutral, info, success, warning, danger",
+            )
+        }
     }
 
     private companion object {

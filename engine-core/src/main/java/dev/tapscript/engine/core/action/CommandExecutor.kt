@@ -3,8 +3,11 @@ package dev.tapscript.engine.core.action
 import dev.tapscript.engine.api.command.AutomationCommand
 import dev.tapscript.engine.api.model.AutomationProfile
 import dev.tapscript.engine.api.model.PixelSize
+import dev.tapscript.engine.api.model.VisualTargetGeometry
+import dev.tapscript.engine.api.model.VisualTone
 import dev.tapscript.engine.api.ports.AutomationLogger
 import dev.tapscript.engine.api.ports.GestureDispatcher
+import dev.tapscript.engine.api.ports.RuntimeVisualPresenter
 import kotlinx.coroutines.delay
 
 class CommandExecutor(
@@ -12,6 +15,8 @@ class CommandExecutor(
     private val actionResolver: ActionResolver,
     private val logger: AutomationLogger,
     private val randomizer: CommandRandomizer = CommandRandomizer(),
+    private val visualPresenter: RuntimeVisualPresenter = NoOpRuntimeVisualPresenter,
+    private val visualTargetResolver: VisualTargetResolver = VisualTargetResolver(),
 ) {
     suspend fun execute(
         commands: List<AutomationCommand>,
@@ -31,8 +36,17 @@ class CommandExecutor(
                     onCommand("log")
                     logger.info("[script] ${command.message}")
                 }
+                is AutomationCommand.Highlight -> executeHighlight(command, profile, onCommand)
+                is AutomationCommand.ShowInfo -> executeShowInfo(command, onCommand)
+                is AutomationCommand.ClearVisual -> executeClearVisual(command.key, onCommand)
+                AutomationCommand.ClearVisuals -> executeClearVisuals(onCommand)
             }
         }
+    }
+
+    suspend fun clearVisuals() {
+        visualPresenter.clearAll()
+            .onFailure { logger.error("Could not clear runtime visuals", it) }
     }
 
     private suspend fun executeTap(
@@ -111,5 +125,74 @@ class CommandExecutor(
         onCommand(description)
         logger.debug("Executing $description")
         delay(duration)
+    }
+
+    private suspend fun executeHighlight(
+        command: AutomationCommand.Highlight,
+        profile: AutomationProfile,
+        onCommand: (String) -> Unit,
+    ) {
+        val description = "highlight:${command.key}:${command.targetId}"
+        onCommand(description)
+
+        val target = visualTargetResolver.resolve(profile, command.targetId)
+            .getOrElse { throwable ->
+                logger.error("Could not resolve $description", throwable)
+                return
+            }
+
+        visualPresenter.showHighlight(
+            key = command.key,
+            target = target,
+            label = command.label,
+            tone = command.tone,
+        ).onFailure { logger.error("Could not show $description", it) }
+    }
+
+    private suspend fun executeShowInfo(
+        command: AutomationCommand.ShowInfo,
+        onCommand: (String) -> Unit,
+    ) {
+        val description = "showInfo:${command.key}"
+        onCommand(description)
+        visualPresenter.showInfo(
+            key = command.key,
+            title = command.title,
+            body = command.body,
+            tone = command.tone,
+        ).onFailure { logger.error("Could not show $description", it) }
+    }
+
+    private suspend fun executeClearVisual(key: String, onCommand: (String) -> Unit) {
+        val description = "clearVisual:$key"
+        onCommand(description)
+        visualPresenter.clear(key)
+            .onFailure { logger.error("Could not execute $description", it) }
+    }
+
+    private suspend fun executeClearVisuals(onCommand: (String) -> Unit) {
+        val description = "clearVisuals"
+        onCommand(description)
+        clearVisuals()
+    }
+
+    private object NoOpRuntimeVisualPresenter : RuntimeVisualPresenter {
+        override suspend fun showHighlight(
+            key: String,
+            target: VisualTargetGeometry,
+            label: String,
+            tone: VisualTone,
+        ): Result<Unit> = Result.success(Unit)
+
+        override suspend fun showInfo(
+            key: String,
+            title: String,
+            body: String,
+            tone: VisualTone,
+        ): Result<Unit> = Result.success(Unit)
+
+        override suspend fun clear(key: String): Result<Unit> = Result.success(Unit)
+
+        override suspend fun clearAll(): Result<Unit> = Result.success(Unit)
     }
 }

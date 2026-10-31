@@ -1,0 +1,6 @@
+{
+  "name": "tapscript-workspace",
+  "private": true,
+  "packageManager": "pnpm@10.18.3",
+  "description": "Workspace manifest; web/api packages will be initialized after design review."
+}

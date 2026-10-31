@@ -1,6 +1,6 @@
 # TapScript — Repository Reset & Migration Plan
 
-**Status:** Proposed change plan, no changes applied to GitHub.  
+**Status:** Foundation migration staged in `chore/platform-monorepo-foundation`; build verification pending.  
 **Examined branch:** `master` in `yurii-zadryhun/TapScript`, as of 2026-10-31.
 
 ## 1. Current audit
@@ -120,3 +120,11 @@ Keep the old implementation accessible with a tag, but do not maintain two paral
 | Pull request too large to review | Separate documentation, Android reset and TS app bootstrap into focused PRs |
 
 **Update (2026-10-31):** The foundation branch begins the Android shell reset and directory restructure. CI results still need independent validation before merge.
+
+## 7. Foundation branch implementation status (2026-10-31)
+
+Implemented in the proposed tree: `apps/mobile` standalone Gradle project with minimal Compose launcher; removal of legacy engine/editor modules; Android CI path and APK artifact adaptation; placeholder directories for `apps/web`, `apps/api`, `packages/*`, and `infra`; PRD, architecture draft, discovery questionnaire, and ADR index.
+
+Not implemented: actual Next.js/NestJS apps, package lockfile, typed SDK, compilation/runtime, signed GitHub Releases/Play publishing, backend and authentication. These are future PRs.
+
+**Validation:** A static file-tree review was performed. A Gradle build or GitHub Actions success was not verified at authoring time. Do not merge until CI succeeds or build failures are resolved.

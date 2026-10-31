@@ -1,16 +1,10 @@
-.PHONY: debug test install release clean
+.PHONY: android-debug android-test android-release
 
-debug:
-	./gradlew :app:assembleDebug
+android-debug:
+	$(MAKE) -C apps/mobile debug
 
-test:
-	./gradlew test
+android-test:
+	$(MAKE) -C apps/mobile test
 
-install: debug
-	adb install -r app/build/outputs/apk/debug/app-debug.apk
-
-release:
-	./gradlew :app:assembleRelease
-
-clean:
-	./gradlew clean
+android-release:
+	$(MAKE) -C apps/mobile release

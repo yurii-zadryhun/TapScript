@@ -1,4 +1,4 @@
-name: TapScript CI
+name: Android CI
 
 on:
   push:
@@ -10,7 +10,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
+    defaults:
+      run:
+        working-directory: apps/mobile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,12 +38,11 @@ jobs:
 
       - name: Collect build outputs
         if: success()
-        shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/TapScript-v0.1.0-debug.apk
-          cp app/build/outputs/apk/release/app-release-unsigned.apk dist/TapScript-v0.1.0-release-unsigned.apk
+          cp app/build/outputs/apk/debug/app-debug.apk dist/TapScript-debug.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk dist/TapScript-release-unsigned.apk
           if [[ -f app/build/reports/lint-results-debug.html ]]; then
             cp app/build/reports/lint-results-debug.html dist/lint-results-debug.html
           fi
@@ -50,7 +51,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: TapScript-v0.1.0-ci-build
-          path: dist/
+          name: TapScript-android-ci
+          path: apps/mobile/dist/
           if-no-files-found: error
           retention-days: 30
